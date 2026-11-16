@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>ADEL INVEST – Espace porteur de projet</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <style>
 :root{--g:#0b6b3a;--gd:#084d2a;--gl:#e8f5ec;--y:#f4c20d;--r:#d62828;--ink:#14281d;--mu:#5d6f64;--bg:#f4f7f5;--card:#fff;--bd:#dbe5df}
 @media(prefers-color-scheme:dark){:root{--ink:#e8f1ec;--mu:#9fb3a7;--bg:#0f1a14;--card:#16251c;--bd:#27402f;--gl:#1b3326}}
@@ -12,8 +13,8 @@
 button{font:inherit;cursor:pointer}a{color:inherit}
 .hide{display:none!important}
 /* login */
-#login{max-width:380px;margin:12vh auto;background:var(--card);padding:28px;border-radius:14px;border:1px solid var(--bd)}
-#login h1{margin:0 0 4px;color:var(--g);font-size:24px}
+#login,#signup{max-width:440px;margin:6vh auto;background:var(--card);padding:28px;border-radius:14px;border:1px solid var(--bd)}
+#login h1,#signup h1{margin:0 0 4px;color:var(--g);font-size:24px}
 input,select,textarea{width:100%;padding:10px 12px;margin:6px 0 12px;border:1px solid var(--bd);border-radius:8px;background:var(--card);color:var(--ink);font:inherit}
 .btn{background:var(--g);color:#fff;border:0;padding:10px 16px;border-radius:8px;font-weight:600}
 .btn.o{background:transparent;color:var(--g);border:1.5px solid var(--g)}
@@ -52,6 +53,11 @@ main{min-width:0}
 .three{grid-column:1/-1;display:grid;gap:16px;grid-template-columns:repeat(3,1fr)}
 .li{display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid var(--bd);font-size:14px}
 .li small{display:block;color:var(--mu)}
+.avw{position:relative;width:96px;margin:0 auto 8px}.avw .av{margin:0;overflow:hidden}.av img{width:100%;height:100%;object-fit:cover}
+.cam{position:absolute;right:-4px;bottom:0;width:32px;height:32px;border-radius:50%;background:var(--g);color:#fff;display:grid;place-items:center;cursor:pointer;border:2px solid var(--card);font-size:15px}
+.cam:hover{background:var(--gd)}
+table{border-collapse:collapse;width:100%;font-size:14px}th,td{text-align:left;padding:8px;border-bottom:1px solid var(--bd);vertical-align:top}
+th{color:var(--mu);font-weight:600}td small{display:block;color:var(--mu)}td .btn{padding:6px 10px;font-size:13px}td select{margin:0;padding:6px}
 /* catégories */
 .cats{display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:12px;margin:12px 0}
 .cat{border:2px solid var(--bd);border-radius:12px;padding:14px;background:var(--card);text-align:left;color:var(--ink)}
@@ -69,13 +75,27 @@ main{min-width:0}
   <label>Mot de passe<input id="pw" type="password" required autocomplete="current-password"></label>
   <div class="err" id="lerr"></div>
   <button class="btn" style="width:100%">Se connecter</button>
+  <p style="text-align:center;margin:14px 0 0"><a href="#" id="toSignup" style="color:var(--g);font-weight:600">Nouveau ? Créer mon espace</a></p>
+</form>
+
+<form id="signup" class="hide">
+  <h1>Créer mon espace</h1><p style="color:var(--mu);margin-top:0">Quelle est votre situation ?</p>
+  <div class="cats" id="sCats"></div>
+  <label>Prénom<input id="s_pre" required autocomplete="given-name"></label>
+  <label>Nom<input id="s_nom" required autocomplete="family-name"></label>
+  <label>Téléphone<input id="s_tel" type="tel" autocomplete="tel" placeholder="+221 77 123 45 67"></label>
+  <label>E-mail<input id="s_em" type="email" required autocomplete="email"></label>
+  <label>Mot de passe (6 caractères minimum)<input id="s_pw" type="password" minlength="6" required autocomplete="new-password"></label>
+  <div class="err" id="serr"></div>
+  <button class="btn" style="width:100%">Créer mon espace</button>
+  <p style="text-align:center;margin:14px 0 0"><a href="#" id="toLogin" style="color:var(--g);font-weight:600">J'ai déjà un compte</a></p>
 </form>
 
 <div id="app" class="hide">
   <aside>
     <div class="logo">ADEL INVEST<small>Ensemble pour un foncier sécurisé</small></div>
-    <a class="on" href="#">Tableau de bord</a><a href="#projet">Mon projet</a><a href="#docs">Mes documents</a>
-    <a href="#">Mes messages</a><a href="#">Actualités</a><a href="#">Support</a><a href="#">Paramètres</a>
+    <a class="on" href="#" data-v="dash">Tableau de bord</a><a href="#" data-v="projet">Mon projet</a><a href="#" data-v="docs">Mes documents</a>
+    <a href="#" data-v="soon">Mes messages</a><a href="#" data-v="soon">Actualités</a><a href="#" data-v="soon">Support</a><a href="#" data-v="soon">Paramètres</a>
     <a href="#" id="out">Déconnexion</a>
   </aside>
   <main>
@@ -103,11 +123,48 @@ const STEPS = [["enregistre","Projet enregistré"],["etude","En cours d'étude"]
 const fmt = d => d ? new Date(d).toLocaleDateString("fr-FR") : "";
 let user, profile, fiche, chosen = "A";
 
+let sCat = "A";
+function drawSCats() {
+  $("sCats").innerHTML = Object.entries(CATS).map(([k, v]) =>
+    `<button type="button" class="cat ${k === sCat ? "on" : ""}" data-k="${k}"><span class="letter">${k}</span><b>${v[0]}</b><span>${v[1]}</span></button>`).join("");
+  $("sCats").querySelectorAll(".cat").forEach(b => b.onclick = () => { sCat = b.dataset.k; drawSCats(); });
+}
+$("toSignup").onclick = e => { e.preventDefault(); $("login").classList.add("hide"); $("signup").classList.remove("hide"); drawSCats(); };
+$("toLogin").onclick = e => { e.preventDefault(); $("signup").classList.add("hide"); $("login").classList.remove("hide"); };
+$("signup").onsubmit = async e => {
+  e.preventDefault(); $("serr").textContent = "";
+  const { data, error } = await sb.auth.signUp({
+    email: $("s_em").value, password: $("s_pw").value,
+    options: { data: { prenom: $("s_pre").value, nom: $("s_nom").value, telephone: $("s_tel").value, categorie: sCat } }
+  });
+  if (error) { $("serr").textContent = "Inscription impossible : " + error.message; return; }
+  if (data.session) return start();
+  $("signup").classList.add("hide"); $("login").classList.remove("hide");
+  $("lerr").style.color = "var(--g)";
+  $("lerr").textContent = "Compte créé. Confirmez votre e-mail, puis connectez-vous.";
+};
 $("login").onsubmit = async e => {
-  e.preventDefault(); $("lerr").textContent = "";
+  e.preventDefault(); $("lerr").style.color = ""; $("lerr").textContent = "";
   const { error } = await sb.auth.signInWithPassword({ email: $("em").value, password: $("pw").value });
   if (error) $("lerr").textContent = "Connexion impossible : " + error.message; else start();
 };
+function toast(msg) {
+  let t = $("toast");
+  if (!t) { t = document.createElement("div"); t.id = "toast";
+    t.style.cssText = "position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:#14281d;color:#fff;padding:12px 18px;border-radius:10px;z-index:99;max-width:90vw";
+    document.body.appendChild(t); }
+  t.textContent = msg; t.style.display = "block"; clearTimeout(t._h); t._h = setTimeout(() => t.style.display = "none", 4000);
+}
+window.addEventListener("error", e => toast("Erreur : " + e.message));
+window.addEventListener("unhandledrejection", e => toast("Erreur : " + (e.reason?.message || e.reason)));
+document.querySelectorAll("aside a[data-v]").forEach(a => a.onclick = e => {
+  e.preventDefault();
+  document.querySelectorAll("aside a").forEach(x => x.classList.remove("on")); a.classList.add("on");
+  const v = a.dataset.v;
+  if (v === "soon") return toast("Cette section sera disponible prochainement.");
+  const target = v === "docs" ? $("docs") : v === "projet" ? ($("projet") || $("grid")) : null;
+  if (target) target.scrollIntoView({ behavior: "smooth", block: "start" }); else window.scrollTo({ top: 0, behavior: "smooth" });
+});
 $("out").onclick = async e => { e.preventDefault(); await sb.auth.signOut(); location.reload(); };
 
 async function start() {
@@ -116,12 +173,12 @@ async function start() {
   user = session.user;
   const p = await sb.from("profiles").select("*").eq("id", user.id).maybeSingle();
   profile = p.data || {};
-  $("login").classList.add("hide"); $("app").classList.remove("hide");
+  if (profile.categorie_souhaitee) chosen = profile.categorie_souhaitee;
+  $("login").classList.add("hide"); $("signup").classList.add("hide"); $("app").classList.remove("hide");
   const name = [profile.prenom, profile.nom].filter(Boolean).join(" ") || user.email;
   $("hello").textContent = "Bonjour " + name;
   if (["admin", "super_admin"].includes(profile.role)) {
-    $("grid").innerHTML = `<div class="card" style="grid-column:1/-1"><h4>Espace ${profile.role === "super_admin" ? "super admin" : "administrateur"}</h4><p>Cette interface sera construite à l'étape suivante.</p></div>`;
-    return;
+    return renderAdmin();
   }
   const f = await sb.from("fiches").select("*").eq("user_id", user.id).order("created_at", { ascending: false }).limit(1);
   fiche = f.data?.[0];
@@ -131,7 +188,7 @@ async function start() {
 function profCard() {
   const name = [profile.prenom, profile.nom].filter(Boolean).join(" ") || user.email;
   const ini = name.split(" ").map(w => w[0]).slice(0, 2).join("").toUpperCase();
-  return `<div class="card prof"><div class="av">${esc(ini)}</div><h3 style="margin:4px 0">${esc(name)}</h3>
+  return `<div class="card prof"><div class="avw"><div class="av">${profile.avatar_url ? `<img src="${esc(profile.avatar_url)}" alt="Photo de profil">` : esc(ini)}</div><label class="cam" for="avatarIn" title="Ajouter ou changer ma photo">📷</label><input id="avatarIn" type="file" accept="image/*" class="hide"></div><h3 style="margin:4px 0">${esc(name)}</h3>
   <span class="tag">Porteur de projet</span><p>✉ ${esc(user.email)}</p><p>☎ ${esc(profile.telephone || "—")}</p></div>`;
 }
 
@@ -158,6 +215,132 @@ async function save() {
   if (error) { $("ferr").textContent = "Erreur : " + error.message; return; }
   start();
 }
+
+// ===== ADMIN / SUPER ADMIN =====
+let ROWS = [], PROFS = [], isSup = false;
+const nom = u => [u.prenom, u.nom].filter(Boolean).join(" ") || "—";
+const label = s => (STEPS.find(x => x[0] === s) || [])[1] || s || "—";
+function save(blob, name) { const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = name; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 1500); }
+
+async function renderAdmin() {
+  isSup = profile.role === "super_admin";
+  document.querySelector(".top p").textContent = isSup ? "Espace super administrateur" : "Espace administrateur";
+  document.querySelectorAll('aside a[data-v="projet"],aside a[data-v="docs"]').forEach(a => a.classList.add("hide"));
+  const [f, p] = await Promise.all([sb.from("fiches").select("*").order("created_at", { ascending: false }), sb.from("profiles").select("*")]);
+  if (f.error || p.error) return toast("Erreur : " + (f.error || p.error).message);
+  PROFS = p.data;
+  const pm = Object.fromEntries(PROFS.map(x => [x.id, x]));
+  ROWS = f.data.map(x => ({ ...x, client: pm[x.user_id] || {} }));
+  $("grid").innerHTML = `<div class="card" style="grid-column:1/-1">
+    <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;justify-content:space-between">
+      <h4 style="margin:0">Projets (<span id="cnt"></span>)</h4>
+      <div style="display:flex;gap:8px;flex-wrap:wrap"><input id="q" placeholder="Rechercher un client, un projet…" style="margin:0;width:230px">
+      <select id="fc" style="margin:0;width:auto"><option value="">Toutes les catégories</option>${Object.keys(CATS).map(k => `<option>${k}</option>`).join("")}</select>
+      <button class="btn" id="xl">Exporter tout (Excel)</button></div></div>
+    <div style="overflow-x:auto;margin-top:10px"><table id="tb"></table></div></div>`;
+  $("q").oninput = drawRows; $("fc").onchange = drawRows; $("xl").onclick = exportXlsx;
+  drawRows();
+  if (isSup) $("grid").insertAdjacentHTML("beforeend", `<div class="card" style="grid-column:1/-1"><h4>Utilisateurs et rôles</h4><div style="overflow-x:auto"><table>${PROFS.map(u =>
+    `<tr><td>${esc(nom(u))}<small>${esc(u.email || "")}</small></td><td><select data-role="${u.id}" ${u.id === user.id ? "disabled" : ""}>${["porteur", "admin", "super_admin"].map(x => `<option ${x === u.role ? "selected" : ""}>${x}</option>`).join("")}</select></td></tr>`).join("")}</table></div></div>`);
+}
+
+function drawRows() {
+  const q = $("q").value.toLowerCase(), c = $("fc").value;
+  const list = ROWS.filter(r => (!c || r.categorie === c) && JSON.stringify([r.titre, r.localisation, r.client.nom, r.client.prenom, r.client.email]).toLowerCase().includes(q));
+  $("cnt").textContent = list.length;
+  $("tb").innerHTML = "<tr>" + ["Client", "Cat.", "Projet", "Localisation", "Ha", "Statut", "Date", ""].map(h => `<th>${h}</th>`).join("") + "</tr>" +
+    (list.map(r => `<tr><td>${esc(nom(r.client))}<small>${esc(r.client.email || "")}</small></td><td>${esc(r.categorie || "")}</td><td>${esc(r.titre)}</td>
+    <td>${esc(r.localisation || "")}</td><td>${esc(r.superficie || "")}</td>
+    <td>${isSup ? `<select data-st="${r.id}">${STEPS.map(s => `<option value="${s[0]}" ${s[0] === r.statut ? "selected" : ""}>${s[1]}</option>`).join("")}</select>` : esc(label(r.statut))}</td>
+    <td>${fmt(r.created_at)}</td><td style="white-space:nowrap"><button class="btn o" data-w="${r.id}">Word</button>${isSup ? ` <button class="btn d" data-x="${r.id}" title="Supprimer">✕</button>` : ""}</td></tr>`).join("") || '<tr><td colspan="8" style="color:var(--mu)">Aucun projet.</td></tr>');
+}
+
+function exportXlsx() {
+  if (!ROWS.length) return toast("Aucun projet à exporter.");
+  const proj = ROWS.map(r => ({ "Catégorie": r.categorie, "Situation": CATS[r.categorie]?.[0], "Titre": r.titre, "Type de projet": r.type_projet, "Localisation": r.localisation,
+    "Superficie (ha)": r.superficie, "Statut": label(r.statut), "Date d'enregistrement": fmt(r.created_at), "Prénom": r.client.prenom, "Nom": r.client.nom,
+    "E-mail": r.client.email, "Téléphone": r.client.telephone, "Description": r.description }));
+  const cli = PROFS.map(u => ({ "Prénom": u.prenom, "Nom": u.nom, "E-mail": u.email, "Téléphone": u.telephone, "Rôle": u.role, "Catégorie choisie": u.categorie_souhaitee, "Inscrit le": fmt(u.created_at) }));
+  const sheet = rows => { const ws = XLSX.utils.json_to_sheet(rows); ws["!cols"] = Object.keys(rows[0] || {}).map(k => ({ wch: Math.min(45, Math.max(k.length, ...rows.map(r => String(r[k] ?? "").length)) + 2) })); return ws; };
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, sheet(proj), "Projets"); XLSX.utils.book_append_sheet(wb, sheet(cli), "Clients");
+  XLSX.writeFile(wb, "ADEL-INVEST-projets-" + new Date().toISOString().slice(0, 10) + ".xlsx");
+}
+
+async function exportDoc(r) {
+  const c = r.client, d = await sb.from("documents").select("nom").eq("fiche_id", r.id);
+  const idx = Math.max(0, STEPS.findIndex(s => s[0] === r.statut));
+  const kv = (k, v) => `<tr><td width="32%" style="padding:7px 10px;background:#e8f5ec;color:#084d2a;font-weight:bold;border-bottom:1px solid #ffffff">${k}</td><td style="padding:7px 10px;border-bottom:1px solid #dbe5df">${esc(v || "—")}</td></tr>`;
+  const h = t => `<p style="margin:22px 0 6px;font-size:14pt;font-weight:bold;color:#0b6b3a;border-bottom:2px solid #f4c20d;padding-bottom:3px">${t}</p>`;
+  const steps = STEPS.map((s, i) => `<td align="center" style="padding:8px 4px;font-size:10pt;background:${i <= idx ? "#0b6b3a" : "#e5e9e7"};color:${i <= idx ? "#ffffff" : "#5d6f64"};border:2px solid #ffffff">${i + 1}. ${s[1]}</td>`).join("");
+  const html = `<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:w="urn:schemas-microsoft-com:office:word" xmlns="http://www.w3.org/TR/REC-html40"><head><meta charset="utf-8"><title>Fiche projet</title></head>
+<body style="font-family:Calibri,Arial,sans-serif;font-size:11pt;color:#14281d">
+<table width="100%" cellspacing="0"><tr><td style="background:#0b6b3a;padding:18px 20px;color:#ffffff"><span style="font-size:22pt;font-weight:bold">ADEL INVEST</span><br><span style="font-size:10pt">Ensemble pour un foncier sécurisé</span></td>
+<td align="right" style="background:#0b6b3a;padding:18px 20px;color:#f4c20d;font-size:13pt;font-weight:bold">FICHE PROJET FONCIER</td></tr>
+<tr><td colspan="2" style="background:#f4c20d;height:5px;font-size:2pt">&nbsp;</td></tr></table>
+<p style="font-size:18pt;font-weight:bold;margin:18px 0 2px">${esc(r.titre)}</p>
+<p style="margin:0;color:#5d6f64">Catégorie ${esc(r.categorie)} – ${esc(CATS[r.categorie]?.[0] || "")}</p>
+${h("Porteur de projet")}<table width="100%" cellspacing="0">${kv("Nom complet", nom(c))}${kv("E-mail", c.email)}${kv("Téléphone", c.telephone)}</table>
+${h("Le projet")}<table width="100%" cellspacing="0">${kv("Type de projet", r.type_projet)}${kv("Localisation", r.localisation)}${kv("Superficie", r.superficie ? r.superficie + " hectares" : "")}${kv("Date d'enregistrement", fmt(r.created_at))}${kv("Statut actuel", label(r.statut))}</table>
+${h("Avancement")}<table width="100%" cellspacing="0"><tr>${steps}</tr></table>
+${h("Description")}<p>${esc(r.description || "Aucune description.")}</p>
+${h("Documents joints")}<p>${(d.data || []).map(x => "• " + esc(x.nom)).join("<br>") || "Aucun document."}</p>
+<p style="margin-top:30px;font-size:9pt;color:#5d6f64;border-top:1px solid #dbe5df;padding-top:6px">Document généré le ${fmt(new Date())} – ADEL INVEST – contact@adel-invest.sn – +221 33 123 45 67</p></body></html>`;
+  save(new Blob(["\ufeff", html], { type: "application/msword" }), "Fiche-" + (r.titre || "projet").replace(/[^\w\-]+/g, "_") + ".doc");
+}
+
+$("grid").addEventListener("click", async e => {
+  const b = e.target.closest("button[data-w],button[data-x]"); if (!b) return;
+  if (b.dataset.w) { b.disabled = true; try { await exportDoc(ROWS.find(r => r.id === b.dataset.w)); } finally { b.disabled = false; } }
+  else if (confirm("Supprimer définitivement ce projet ?")) {
+    const { error } = await sb.from("fiches").delete().eq("id", b.dataset.x);
+    if (error) return toast("Erreur : " + error.message);
+    ROWS = ROWS.filter(r => r.id !== b.dataset.x); drawRows();
+  }
+});
+$("grid").addEventListener("change", async e => {
+  const t = e.target;
+  if (t.dataset.st) {
+    const r = ROWS.find(x => x.id === t.dataset.st);
+    const { error } = await sb.from("fiches").update({ statut: t.value, updated_at: new Date().toISOString() }).eq("id", r.id);
+    if (error) { t.value = r.statut; return toast("Erreur : " + error.message); }
+    r.statut = t.value; toast("Statut mis à jour.");
+    sb.from("notifications").insert({ user_id: r.user_id, message: "Votre projet est passé à l'étape : " + label(t.value) });
+  }
+  if (t.dataset.role) {
+    const { error } = await sb.from("profiles").update({ role: t.value }).eq("id", t.dataset.role);
+    toast(error ? "Erreur : " + error.message : "Rôle mis à jour.");
+  }
+});
+
+function shrink(file, size) {
+  return new Promise((ok, ko) => {
+    const img = new Image();
+    img.onload = () => {
+      const s = Math.min(img.width, img.height), c = document.createElement("canvas");
+      c.width = c.height = size;
+      c.getContext("2d").drawImage(img, (img.width - s) / 2, (img.height - s) / 2, s, s, 0, 0, size, size);
+      c.toBlob(b => b ? ok(b) : ko(new Error("Image illisible")), "image/jpeg", 0.85);
+    };
+    img.onerror = () => ko(new Error("Image illisible"));
+    img.src = URL.createObjectURL(file);
+  });
+}
+$("grid").addEventListener("change", async e => {
+  if (e.target.id !== "avatarIn" || !e.target.files[0]) return;
+  const file = e.target.files[0];
+  if (!file.type.startsWith("image/")) return toast("Choisissez une image (JPG ou PNG).");
+  try {
+    const blob = await shrink(file, 400), path = user.id + "/avatar.jpg";
+    const up = await sb.storage.from("avatars").upload(path, blob, { upsert: true, contentType: "image/jpeg" });
+    if (up.error) throw up.error;
+    const url = sb.storage.from("avatars").getPublicUrl(path).data.publicUrl + "?v=" + Date.now();
+    const r = await sb.from("profiles").update({ avatar_url: url }).eq("id", user.id);
+    if (r.error) throw r.error;
+    profile.avatar_url = url; toast("Photo mise à jour.");
+    fiche ? renderDash() : renderNew();
+  } catch (err) { toast("Photo non enregistrée : " + err.message); }
+});
 
 async function renderDash() {
   const idx = Math.max(0, STEPS.findIndex(s => s[0] === fiche.statut));
