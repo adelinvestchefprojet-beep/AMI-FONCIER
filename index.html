@@ -30,8 +30,10 @@ aside a{display:block;padding:11px 14px;border-radius:8px;text-decoration:none;c
 aside a.on{background:#2fa84f;font-weight:700;color:#fff}
 aside a:hover{background:rgba(255,255,255,.12)}
 main{min-width:0}
-.top{display:flex;justify-content:space-between;align-items:center;padding:14px 24px;background:var(--card);border-bottom:1px solid var(--bd)}
+.top{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;padding:14px 24px;background:var(--card);border-bottom:1px solid var(--bd)}
 .top h2{margin:0;font-size:20px}.top p{margin:2px 0 0;color:var(--mu);font-size:14px}
+.space{display:flex;align-items:center;gap:8px;font-size:14px;font-weight:600;color:var(--mu)}
+.space select{margin:0;width:auto;min-width:180px;font-weight:700;color:var(--g);border:1.5px solid var(--g)}
 .banner{height:110px;background:linear-gradient(90deg,rgba(8,77,42,.92),rgba(8,77,42,.5)),repeating-linear-gradient(100deg,#2e8b3d 0 14px,#3da04c 14px 28px);color:#fff;padding:22px 24px;position:relative;overflow:hidden}
 .banner h3{margin:0;font-size:26px}.banner em{opacity:.9}
 .banner:after{content:"";position:absolute;right:-40px;top:0;width:260px;height:100%;background:linear-gradient(110deg,transparent 20%,var(--g) 20% 40%,var(--y) 40% 65%,var(--r) 65%);transform:skewX(-20deg)}
@@ -71,7 +73,7 @@ th{color:var(--mu);font-weight:600}td small{display:block;color:var(--mu)}td .bt
 </head>
 <body>
 
-<form id="login">
+<form id="login" class="hide">
   <h1>ADEL INVEST</h1><p style="color:var(--mu);margin-top:0">Connexion à votre espace</p>
   <label>E-mail<input id="em" type="email" required autocomplete="email"></label>
   <label>Mot de passe<input id="pw" type="password" required autocomplete="current-password"></label>
@@ -80,16 +82,24 @@ th{color:var(--mu);font-weight:600}td small{display:block;color:var(--mu)}td .bt
   <p style="text-align:center;margin:14px 0 0"><a href="#" id="toSignup" style="color:var(--g);font-weight:600">Nouveau ? Créer mon espace</a></p>
 </form>
 
-<form id="signup" class="hide">
-  <h1>Créer mon espace</h1><p style="color:var(--mu);margin-top:0">Quelle est votre situation ?</p>
+<form id="signup" style="max-width:640px">
+  <h1>ADEL INVEST</h1><p style="color:var(--mu);margin-top:0">Enregistrez votre projet foncier : votre espace personnel sera créé automatiquement.</p>
+  <p style="margin:0;font-weight:600">1. Quelle est votre situation ?</p>
   <div class="cats" id="sCats"></div>
+  <p style="margin:12px 0 0;font-weight:600">2. Votre projet</p>
+  <label>Titre du projet<input id="s_titre" required placeholder="Ex. Terrain de 2 ha à vendre"></label>
+  <label>Type de projet<input id="s_type" placeholder="Agriculture, habitat, élevage…"></label>
+  <label>Localisation<input id="s_loc" placeholder="Dakar, Sénégal"></label>
+  <label>Superficie (hectares)<input id="s_sup" type="number" min="0" step="0.01"></label>
+  <label>À propos de mon projet<textarea id="s_desc" rows="3"></textarea></label>
+  <p style="margin:12px 0 0;font-weight:600">3. Vos informations et votre accès</p>
   <label>Prénom<input id="s_pre" required autocomplete="given-name"></label>
   <label>Nom<input id="s_nom" required autocomplete="family-name"></label>
   <label>Téléphone<input id="s_tel" type="tel" autocomplete="tel" placeholder="+221 77 123 45 67"></label>
   <label>E-mail<input id="s_em" type="email" required autocomplete="email"></label>
   <label>Mot de passe (6 caractères minimum)<input id="s_pw" type="password" minlength="6" required autocomplete="new-password"></label>
   <div class="err" id="serr"></div>
-  <button class="btn" style="width:100%">Créer mon espace</button>
+  <button class="btn" style="width:100%">Enregistrer mon projet et créer mon espace</button>
   <p style="text-align:center;margin:14px 0 0"><a href="#" id="toLogin" style="color:var(--g);font-weight:600">J'ai déjà un compte</a></p>
 </form>
 
@@ -101,7 +111,10 @@ th{color:var(--mu);font-weight:600}td small{display:block;color:var(--mu)}td .bt
     <a href="#" id="out">Déconnexion</a>
   </aside>
   <main>
-    <div class="top"><div><h2 id="hello"></h2><p>Bienvenue sur votre espace porteur de projet</p></div></div>
+    <div class="top">
+      <div><h2 id="hello"></h2><p id="subHello">Bienvenue sur votre espace porteur de projet</p></div>
+      <label class="space hide" id="spaceWrap" for="spaceSel">Changer d'espace<select id="spaceSel"></select></label>
+    </div>
     <div class="banner"><h3>Base de données foncière ADEL INVEST</h3><em>Enregistrez, gérez et valorisez vos projets fonciers</em></div>
     <div class="grid" id="grid"></div>
   </main>
@@ -125,6 +138,23 @@ const STEPS = [["enregistre","Projet enregistré"],["etude","En cours d'étude"]
 const fmt = d => d ? new Date(d).toLocaleDateString("fr-FR") : "";
 let user, profile, fiche, chosen = "A";
 
+// ===== Sélecteur d'espace (super admin / admin / client) =====
+const SPACES = { super_admin: "Espace super admin", admin: "Espace admin", client: "Espace client" };
+let space = null;
+function allowedSpaces() {
+  if (profile.role === "super_admin") return ["super_admin", "admin", "client"];
+  if (profile.role === "admin") return ["admin", "client"];
+  return ["client"];
+}
+const isAdminSpace = () => space === "super_admin" || space === "admin";
+function setupSpaceSwitcher() {
+  const list = allowedSpaces();
+  if (!space || !list.includes(space)) space = list[0];
+  $("spaceWrap").classList.toggle("hide", list.length < 2);
+  $("spaceSel").innerHTML = list.map(k => `<option value="${k}" ${k === space ? "selected" : ""}>${SPACES[k]}</option>`).join("");
+}
+$("spaceSel").onchange = e => { space = e.target.value; navigate("dash"); };
+
 let sCat = "A";
 function drawSCats() {
   $("sCats").innerHTML = Object.entries(CATS).map(([k, v]) =>
@@ -135,15 +165,27 @@ $("toSignup").onclick = e => { e.preventDefault(); $("login").classList.add("hid
 $("toLogin").onclick = e => { e.preventDefault(); $("signup").classList.add("hide"); $("login").classList.remove("hide"); };
 $("signup").onsubmit = async e => {
   e.preventDefault(); $("serr").textContent = "";
+  const email = $("s_em").value.trim(), password = $("s_pw").value;
+  const projet = { categorie: sCat, titre: $("s_titre").value.trim(), type_projet: $("s_type").value, localisation: $("s_loc").value,
+    superficie: $("s_sup").value || null, description: $("s_desc").value, statut: "enregistre" };
   const { data, error } = await sb.auth.signUp({
-    email: $("s_em").value, password: $("s_pw").value,
+    email, password,
     options: { data: { prenom: $("s_pre").value, nom: $("s_nom").value, telephone: $("s_tel").value, categorie: sCat } }
   });
   if (error) { $("serr").textContent = "Inscription impossible : " + error.message; return; }
-  if (data.session) return start();
-  $("signup").classList.add("hide"); $("login").classList.remove("hide");
-  $("lerr").style.color = "var(--g)";
-  $("lerr").textContent = "Compte créé. Confirmez votre e-mail, puis connectez-vous.";
+  let session = data.session;
+  if (!session) { const r = await sb.auth.signInWithPassword({ email, password }); session = r.data?.session; }
+  if (!session) {
+    // Confirmation e-mail exigée : le projet est gardé et enregistré à la première connexion.
+    try { localStorage.setItem("adel_pending_" + email.toLowerCase(), JSON.stringify(projet)); } catch {}
+    $("signup").classList.add("hide"); $("login").classList.remove("hide");
+    $("lerr").style.color = "var(--g)";
+    $("lerr").textContent = "Compte créé. Confirmez votre e-mail, puis connectez-vous : votre projet sera enregistré.";
+    return;
+  }
+  const ins = await sb.from("fiches").insert({ user_id: session.user.id, ...projet });
+  if (ins.error) toast("Projet non enregistré : " + ins.error.message);
+  start();
 };
 $("login").onsubmit = async e => {
   e.preventDefault(); $("lerr").style.color = ""; $("lerr").textContent = "";
@@ -255,12 +297,13 @@ async function renderSettings() {
 }
 async function navigate(view) {
   setActiveMenu(view);
-  if (view === "dash") {
-    if (["admin","super_admin"].includes(profile.role)) return renderAdmin();
-    return fiche ? renderDash() : renderNew();
-  }
-  if (view === "projet") {
-    if (["admin","super_admin"].includes(profile.role)) return renderAdmin();
+  const adm = isAdminSpace();
+  // Sous-titre et menu selon l'espace actif
+  $("subHello").textContent = space === "super_admin" ? "Espace super administrateur"
+    : space === "admin" ? "Espace administrateur" : "Bienvenue sur votre espace porteur de projet";
+  document.querySelectorAll('aside a[data-v="projet"],aside a[data-v="docs"]').forEach(a => a.classList.toggle("hide", adm));
+  if (view === "dash" || view === "projet") {
+    if (adm) return renderAdmin();
     return fiche ? renderDash() : renderNew();
   }
   if (view === "docs") return renderDocumentsPage();
@@ -284,7 +327,16 @@ async function start() {
   $("hello").textContent = "Bonjour " + name;
   const f = await sb.from("fiches").select("*").eq("user_id", user.id).order("created_at", { ascending: false }).limit(1);
   fiche = f.data?.[0];
-  if (["admin", "super_admin"].includes(profile.role)) return renderAdmin();
+  if (!fiche) {
+    try {
+      const k = "adel_pending_" + (user.email || "").toLowerCase(), raw = localStorage.getItem(k);
+      if (raw) {
+        const ins = await sb.from("fiches").insert({ user_id: user.id, ...JSON.parse(raw) }).select().limit(1);
+        if (!ins.error) { localStorage.removeItem(k); fiche = ins.data?.[0]; }
+      }
+    } catch {}
+  }
+  setupSpaceSwitcher();
   navigate("dash");
 }
 
@@ -326,9 +378,7 @@ const label = s => (STEPS.find(x => x[0] === s) || [])[1] || s || "—";
 function saveFile(blob, name) { const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = name; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 1500); }
 
 async function renderAdmin() {
-  isSup = profile.role === "super_admin";
-  document.querySelector(".top p").textContent = isSup ? "Espace super administrateur" : "Espace administrateur";
-  document.querySelectorAll('aside a[data-v="projet"],aside a[data-v="docs"]').forEach(a => a.classList.add("hide"));
+  isSup = space === "super_admin";
   const [f, p] = await Promise.all([sb.from("fiches").select("*").order("created_at", { ascending: false }), sb.from("profiles").select("*")]);
   if (f.error || p.error) return toast("Erreur : " + (f.error || p.error).message);
   PROFS = p.data;
@@ -505,6 +555,7 @@ async function renderDash() {
   };
   $("addd").onclick = () => navigate("docs");
 }
+drawSCats();
 start();
 </script>
 </body>
