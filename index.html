@@ -139,14 +139,15 @@ const fmt = d => d ? new Date(d).toLocaleDateString("fr-FR") : "";
 let user, profile, fiche, chosen = "A";
 
 // ===== Sélecteur d'espace (super admin / admin / client) =====
-const SPACES = { super_admin: "Espace super admin", admin: "Espace admin", client: "Espace client" };
+const SPACES = { super_admin: "Espace super admin", admin: "Espace admin", client: "Espace client", lecteur: "Supervision (lecture seule)" };
 let space = null;
 function allowedSpaces() {
+  if (profile.role === "lecteur") return ["lecteur"];
   if (profile.role === "super_admin") return ["super_admin", "admin", "client"];
   if (profile.role === "admin") return ["admin", "client"];
   return ["client"];
 }
-const isAdminSpace = () => space === "super_admin" || space === "admin";
+const isAdminSpace = () => space === "super_admin" || space === "admin" || space === "lecteur";
 function setupSpaceSwitcher() {
   const list = allowedSpaces();
   if (!space || !list.includes(space)) space = list[0];
@@ -300,7 +301,7 @@ async function navigate(view) {
   const adm = isAdminSpace();
   // Sous-titre et menu selon l'espace actif
   $("subHello").textContent = space === "super_admin" ? "Espace super administrateur"
-    : space === "admin" ? "Espace administrateur" : "Bienvenue sur votre espace porteur de projet";
+    : space === "admin" ? "Espace administrateur" : space === "lecteur" ? "Espace de supervision (lecture seule)" : "Bienvenue sur votre espace porteur de projet";
   document.querySelectorAll('aside a[data-v="projet"],aside a[data-v="docs"]').forEach(a => a.classList.toggle("hide", adm));
   if (view === "dash" || view === "projet") {
     if (adm) return renderAdmin();
@@ -394,7 +395,7 @@ async function renderAdmin() {
   $("q").oninput = drawRows; $("fc").onchange = drawRows; $("xl").onclick = exportXlsx;
   drawRows();
   if (isSup) $("grid").insertAdjacentHTML("beforeend", `<div class="card" style="grid-column:1/-1"><h4>Utilisateurs et rôles</h4><div style="overflow-x:auto"><table>${PROFS.map(u =>
-    `<tr><td>${esc(nom(u))}<small>${esc(u.email || "")}</small></td><td><select data-role="${u.id}" ${u.id === user.id ? "disabled" : ""}>${["porteur", "admin", "super_admin"].map(x => `<option ${x === u.role ? "selected" : ""}>${x}</option>`).join("")}</select></td></tr>`).join("")}</table></div></div>`);
+    `<tr><td>${esc(nom(u))}<small>${esc(u.email || "")}</small></td><td><select data-role="${u.id}" ${u.id === user.id ? "disabled" : ""}>${["porteur", "admin", "super_admin", "lecteur"].map(x => `<option ${x === u.role ? "selected" : ""}>${x}</option>`).join("")}</select></td></tr>`).join("")}</table></div></div>`);
 }
 
 function drawRows() {
