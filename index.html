@@ -4,6 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>ADEL INVEST – Espace porteur de projet</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 viewBox=%270 0 64 64%27%3E%3Crect width=%2764%27 height=%2764%27 rx=%2714%27 fill=%27%230b6b3a%27/%3E%3Ctext x=%2732%27 y=%2744%27 font-size=%2738%27 text-anchor=%27middle%27 fill=%27white%27 font-family=%27Arial%27 font-weight=%27bold%27%3EA%3C/text%3E%3C/svg%3E">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <style>
@@ -95,7 +96,7 @@ th{color:var(--mu);font-weight:600}td small{display:block;color:var(--mu)}td .bt
   <aside>
     <div class="logo">ADEL INVEST<small>Ensemble pour un foncier sécurisé</small></div>
     <a class="on" href="#" data-v="dash">Tableau de bord</a><a href="#" data-v="projet">Mon projet</a><a href="#" data-v="docs">Mes documents</a>
-    <a href="#" data-v="soon">Mes messages</a><a href="#" data-v="soon">Actualités</a><a href="#" data-v="soon">Support</a><a href="#" data-v="soon">Paramètres</a>
+    <a href="#" data-v="messages">Mes messages</a><a href="#" data-v="actualites">Actualités</a><a href="#" data-v="support">Support</a><a href="#" data-v="settings">Paramètres</a>
     <a href="#" id="out">Déconnexion</a>
   </aside>
   <main>
@@ -157,14 +158,73 @@ function toast(msg) {
 }
 window.addEventListener("error", e => toast("Erreur : " + e.message));
 window.addEventListener("unhandledrejection", e => toast("Erreur : " + (e.reason?.message || e.reason)));
-document.querySelectorAll("aside a[data-v]").forEach(a => a.onclick = e => {
-  e.preventDefault();
-  document.querySelectorAll("aside a").forEach(x => x.classList.remove("on")); a.classList.add("on");
-  const v = a.dataset.v;
-  if (v === "soon") return toast("Cette section sera disponible prochainement.");
-  const target = v === "docs" ? $("docs") : v === "projet" ? ($("projet") || $("grid")) : null;
-  if (target) target.scrollIntoView({ behavior: "smooth", block: "start" }); else window.scrollTo({ top: 0, behavior: "smooth" });
-});
+// Navigation principale : chaque entrée ouvre une véritable page dans l'espace.
+function setActiveMenu(view) {
+  document.querySelectorAll("aside a[data-v]").forEach(a => a.classList.toggle("on", a.dataset.v === view));
+}
+function valueText(v) {
+  if (v === null || v === undefined || v === "") return "—";
+  if (typeof v === "object") return JSON.stringify(v);
+  return String(v);
+}
+function genericRecordsHTML(rows) {
+  if (!rows || !rows.length) return '<p style="color:var(--mu)">Aucun élément disponible pour le moment.</p>';
+  return rows.map((row, i) => {
+    const entries = Object.entries(row).filter(([k,v]) => !["id","user_id","fiche_id"].includes(k) && v !== null && v !== "");
+    return `<article class="card" style="margin:10px 0"><h4>Élément ${i+1}</h4><div class="rows">${entries.map(([k,v]) => `<div><b>${esc(k.replaceAll("_"," "))} :</b><span>${esc(valueText(v))}</span></div>`).join("")}</div></article>`;
+  }).join("");
+}
+async function renderDataPage(title, table, intro, ownOnly=false) {
+  $("grid").innerHTML = `<div class="card" style="grid-column:1/-1"><h4>${esc(title)}</h4><p style="color:var(--mu)">${esc(intro)}</p><p>Chargement des données…</p></div>`;
+  let query = sb.from(table).select("*").limit(50);
+  if (ownOnly) query = query.eq("user_id", user.id);
+  const {data, error} = await query;
+  if (error) {
+    $("grid").innerHTML = `<div class="card" style="grid-column:1/-1"><h4>${esc(title)}</h4><p class="err">Impossible de charger cette rubrique : ${esc(error.message)}</p><p style="color:var(--mu)">Vérifiez les politiques RLS et les autorisations de la table <b>${esc(table)}</b> dans Supabase.</p></div>`;
+    return;
+  }
+  $("grid").innerHTML = `<div style="grid-column:1/-1"><div class="card"><h4>${esc(title)}</h4><p style="color:var(--mu)">${esc(intro)}</p><p>${data.length} élément(s) affiché(s), maximum 50.</p></div>${genericRecordsHTML(data)}</div>`;
+}
+async function renderDocumentsPage() {
+  if (!fiche) {
+    $("grid").innerHTML = `<div class="card" style="grid-column:1/-1"><h4>Mes documents</h4><p>Enregistrez d'abord un projet pour pouvoir lui associer des documents.</p><button class="btn" id="goProject">Créer mon projet</button></div>`;
+    $("goProject").onclick = () => navigate("projet");
+    return;
+  }
+  $("grid").innerHTML = '<div class="card" style="grid-column:1/-1"><h4>Mes documents</h4><p>Chargement…</p></div>';
+  const {data, error} = await sb.from("documents").select("*").eq("fiche_id", fiche.id).order("created_at", {ascending:false});
+  if (error) {
+    $("grid").innerHTML = `<div class="card" style="grid-column:1/-1"><h4>Mes documents</h4><p class="err">${esc(error.message)}</p></div>`; return;
+  }
+  $("grid").innerHTML = `<div style="grid-column:1/-1"><div class="card"><h4>Mes documents</h4><p style="color:var(--mu)">Documents associés à votre projet.</p><p>${data.length} document(s) enregistré(s).</p></div>${genericRecordsHTML(data)}</div>`;
+}
+async function renderSettings() {
+  $("grid").innerHTML = `<div class="card" style="grid-column:1/-1"><h4>Paramètres de mon compte</h4><label>Prénom<input id="setPrenom" value="${esc(profile.prenom || "")}"></label><label>Nom<input id="setNom" value="${esc(profile.nom || "")}"></label><label>Téléphone<input id="setTel" value="${esc(profile.telephone || "")}"></label><label>E-mail<input value="${esc(user.email || "")}" disabled></label><div class="err" id="setErr"></div><button class="btn" id="saveSettings">Enregistrer les modifications</button><p style="color:var(--mu);font-size:13px">L'adresse e-mail est gérée par l'authentification Supabase.</p></div>`;
+  $("saveSettings").onclick = async () => {
+    const payload = {prenom: $("setPrenom").value.trim(), nom: $("setNom").value.trim(), telephone: $("setTel").value.trim()};
+    const {error} = await sb.from("profiles").update(payload).eq("id", user.id);
+    if (error) { $("setErr").textContent = "Enregistrement impossible : " + error.message; return; }
+    profile = {...profile, ...payload}; $("hello").textContent = "Bonjour " + [profile.prenom, profile.nom].filter(Boolean).join(" ");
+    toast("Profil mis à jour.");
+  };
+}
+async function navigate(view) {
+  setActiveMenu(view);
+  if (view === "dash") {
+    if (["admin","super_admin"].includes(profile.role)) return renderAdmin();
+    return fiche ? renderDash() : renderNew();
+  }
+  if (view === "projet") {
+    if (["admin","super_admin"].includes(profile.role)) return renderAdmin();
+    return fiche ? renderDash() : renderNew();
+  }
+  if (view === "docs") return renderDocumentsPage();
+  if (view === "messages") return renderDataPage("Mes messages", "messages", "Messages accessibles selon les règles de sécurité Supabase.");
+  if (view === "actualites") return renderDataPage("Actualités", "actualites", "Informations et actualités publiées sur ADEL INVEST.");
+  if (view === "support") return renderDataPage("Support", "support_tickets", "Suivi de vos demandes de support.");
+  if (view === "settings") return renderSettings();
+}
+document.querySelectorAll("aside a[data-v]").forEach(a => a.onclick = e => { e.preventDefault(); navigate(a.dataset.v); });
 $("out").onclick = async e => { e.preventDefault(); await sb.auth.signOut(); location.reload(); };
 
 async function start() {
@@ -177,12 +237,10 @@ async function start() {
   $("login").classList.add("hide"); $("signup").classList.add("hide"); $("app").classList.remove("hide");
   const name = [profile.prenom, profile.nom].filter(Boolean).join(" ") || user.email;
   $("hello").textContent = "Bonjour " + name;
-  if (["admin", "super_admin"].includes(profile.role)) {
-    return renderAdmin();
-  }
   const f = await sb.from("fiches").select("*").eq("user_id", user.id).order("created_at", { ascending: false }).limit(1);
   fiche = f.data?.[0];
-  fiche ? renderDash() : renderNew();
+  if (["admin", "super_admin"].includes(profile.role)) return renderAdmin();
+  navigate("dash");
 }
 
 function profCard() {
