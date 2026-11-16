@@ -52,8 +52,9 @@ main{min-width:0}
 .st i{width:30px;height:30px;border-radius:50%;display:grid;place-items:center;font-style:normal;background:var(--bd);color:var(--mu);font-weight:700;flex:none}
 .st.ok i{background:#2fa84f;color:#fff}.st.cur i{background:var(--gd);color:#fff;box-shadow:0 0 0 4px var(--gl)}
 .three{grid-column:1/-1;display:grid;gap:16px;grid-template-columns:repeat(3,1fr)}
-.li{display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid var(--bd);font-size:14px}
+.li{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid var(--bd);font-size:14px}
 .li small{display:block;color:var(--mu)}
+.li .btn{padding:6px 10px;font-size:13px;flex:none}
 .avw{position:relative;width:96px;margin:0 auto 8px}.avw .av{margin:0;overflow:hidden}.av img{width:100%;height:100%;object-fit:cover}
 .cam{position:absolute;right:-4px;bottom:0;width:32px;height:32px;border-radius:50%;background:var(--g);color:#fff;display:grid;place-items:center;cursor:pointer;border:2px solid var(--card);font-size:15px}
 .cam:hover{background:var(--gd)}
@@ -370,7 +371,10 @@ function exportXlsx() {
 }
 
 async function exportDoc(r) {
-  const c = r.client, d = await sb.from("documents").select("nom").eq("fiche_id", r.id);
+  const c = r.client;
+  // Documents joints : lus directement depuis le bucket Storage (userId/ficheId/)
+  const dl = await sb.storage.from(DOCS_BUCKET).list(`${r.user_id}/${r.id}`, { limit: 100 });
+  const files = (dl.data || []).filter(f => f.name && f.id);
   const idx = Math.max(0, STEPS.findIndex(s => s[0] === r.statut));
   const kv = (k, v) => `<tr><td width="32%" style="padding:7px 10px;background:#e8f5ec;color:#084d2a;font-weight:bold;border-bottom:1px solid #ffffff">${k}</td><td style="padding:7px 10px;border-bottom:1px solid #dbe5df">${esc(v || "—")}</td></tr>`;
   const h = t => `<p style="margin:22px 0 6px;font-size:14pt;font-weight:bold;color:#0b6b3a;border-bottom:2px solid #f4c20d;padding-bottom:3px">${t}</p>`;
@@ -386,7 +390,7 @@ ${h("Porteur de projet")}<table width="100%" cellspacing="0">${kv("Nom complet",
 ${h("Le projet")}<table width="100%" cellspacing="0">${kv("Type de projet", r.type_projet)}${kv("Localisation", r.localisation)}${kv("Superficie", r.superficie ? r.superficie + " hectares" : "")}${kv("Date d'enregistrement", fmt(r.created_at))}${kv("Statut actuel", label(r.statut))}</table>
 ${h("Avancement")}<table width="100%" cellspacing="0"><tr>${steps}</tr></table>
 ${h("Description")}<p>${esc(r.description || "Aucune description.")}</p>
-${h("Documents joints")}<p>${(d.data || []).map(x => "• " + esc(x.nom)).join("<br>") || "Aucun document."}</p>
+${h("Documents joints")}<p>${files.map(x => "• " + esc(x.name.replace(/^\d+_/, ""))).join("<br>") || "Aucun document."}</p>
 <p style="margin-top:30px;font-size:9pt;color:#5d6f64;border-top:1px solid #dbe5df;padding-top:6px">Document généré le ${fmt(new Date())} – ADEL INVEST – contact@adel-invest.sn – +221 33 123 45 67</p></body></html>`;
   saveFile(new Blob(["\ufeff", html], { type: "application/msword" }), "Fiche-" + (r.titre || "projet").replace(/[^\w\-]+/g, "_") + ".doc");
 }
@@ -447,10 +451,14 @@ $("grid").addEventListener("change", async e => {
 async function renderDash() {
   const idx = Math.max(0, STEPS.findIndex(s => s[0] === fiche.statut));
   const cat = CATS[fiche.categorie]?.[0] || "—";
-  const [docs, notifs] = await Promise.all([
-    sb.from("documents").select("*").eq("fiche_id", fiche.id).order("created_at", { ascending: false }),
+  const folder = `${user.id}/${fiche.id}`;
+  // Les documents sont lus directement dans le bucket Storage (même emplacement que la page « Mes documents »)
+  const [docsResult, notifs] = await Promise.all([
+    sb.storage.from(DOCS_BUCKET).list(folder, { limit: 100, sortBy: { column: "created_at", order: "desc" } }),
     sb.from("notifications").select("*").eq("user_id", user.id).order("created_at", { ascending: false }).limit(3)
   ]);
+  const docsError = docsResult.error;
+  const docs = (docsResult.data || []).filter(f => f.name && f.id);
   const steps = STEPS.map((s, i) => `<div class="st ${i < idx ? "ok" : i === idx ? "cur" : ""}"><i>${i < idx ? "✓" : i + 1}</i><span>${s[1]}</span></div>`).join("");
   $("grid").innerHTML = profCard() + `<div id="projet">
     <div class="proj">Mon projet foncier <span>✓ Projet enregistré</span></div>
@@ -462,11 +470,31 @@ async function renderDash() {
       <button class="btn o" id="addd">Joindre des documents</button><button class="btn d" id="del">Supprimer mon projet</button></div></div>
       <div class="steps">${steps}</div></div></div>
     <div class="three">
-      <div class="card" id="docs"><h4>Mes documents</h4>${(docs.data || []).map(d => `<div class="li"><div>${esc(d.nom)}<small>Téléchargé le ${fmt(d.created_at)}</small></div></div>`).join("") || '<p style="color:var(--mu)">Aucun document pour le moment.</p>'}</div>
+      <div class="card" id="docs"><h4>Mes documents</h4>${
+        docsError
+          ? `<p class="err">Erreur : ${esc(docsError.message)}</p>`
+          : docs.length
+            ? docs.map((d, i) => `<div class="li"><div>${esc(d.name.replace(/^\d+_/, ""))}<small>Déposé le ${fmt(d.created_at)}</small></div><button class="btn" type="button" data-dash-doc="${i}">Ouvrir</button></div>`).join("")
+            : '<p style="color:var(--mu)">Aucun document pour le moment.</p>'
+      }</div>
       <div class="card"><h4>À propos de mon projet</h4><p>${esc(fiche.description || "Aucune description.")}</p>
         <p style="border-top:1px solid var(--bd);padding-top:8px"><b>Contact ADEL INVEST</b><br>☎ +221 33 123 45 67<br>✉ contact@adel-invest.sn</p></div>
       <div class="card"><h4>Mes notifications</h4>${(notifs.data || []).map(n => `<div class="li"><div>${esc(n.message)}<small>${fmt(n.created_at)}</small></div></div>`).join("") || '<p style="color:var(--mu)">Aucune notification.</p>'}</div>
     </div>`;
+
+  // Boutons d'ouverture / téléchargement des documents (lien signé valable 60 s)
+  $("grid").querySelectorAll("button[data-dash-doc]").forEach(button => {
+    button.addEventListener("click", async () => {
+      const file = docs[Number(button.dataset.dashDoc)];
+      if (!file) return;
+      button.disabled = true; button.textContent = "Préparation…";
+      const { data, error } = await sb.storage.from(DOCS_BUCKET).createSignedUrl(`${folder}/${file.name}`, 60);
+      button.disabled = false; button.textContent = "Ouvrir";
+      if (error) return toast("Ouverture impossible : " + error.message);
+      window.open(data.signedUrl, "_blank", "noopener,noreferrer");
+    });
+  });
+
   $("del").onclick = async () => {
     if (!confirm("Supprimer définitivement ce projet ?")) return;
     await sb.from("fiches").delete().eq("id", fiche.id); start();
