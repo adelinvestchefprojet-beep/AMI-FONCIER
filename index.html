@@ -358,6 +358,7 @@ async function start() {
   user = session.user;
   const p = await sb.from("profiles").select("*").eq("id", user.id).maybeSingle();
   profile = p.data || {};
+  if (!profile.avatar_url && user.user_metadata?.avatar_url) profile.avatar_url = user.user_metadata.avatar_url;
   if (profile.categorie_souhaitee) chosen = profile.categorie_souhaitee;
   $("login").classList.add("hide"); $("signup").classList.add("hide"); $("app").classList.remove("hide");
   const name = [profile.prenom, profile.nom].filter(Boolean).join(" ") || user.email;
@@ -602,9 +603,14 @@ $("grid").addEventListener("change", async e => {
     const up = await sb.storage.from("avatars").upload(path, blob, { upsert: true, contentType: "image/jpeg" });
     if (up.error) throw up.error;
     const url = sb.storage.from("avatars").getPublicUrl(path).data.publicUrl + "?v=" + Date.now();
-    const r = await sb.from("profiles").update({ avatar_url: url }).eq("id", user.id);
-    if (r.error) throw r.error;
-    profile.avatar_url = url; toast("Photo mise à jour.");
+    // 1) table profiles (visible par les admins) ; .select() permet de détecter un refus silencieux (RLS)
+    const r = await sb.from("profiles").update({ avatar_url: url }).eq("id", user.id).select("id");
+    const saved = !r.error && r.data && r.data.length > 0;
+    // 2) copie de sécurité dans le compte de connexion : la photo revient toujours à la reconnexion
+    const m = await sb.auth.updateUser({ data: { avatar_url: url } });
+    if (m.error && !saved) throw m.error;
+    profile.avatar_url = url;
+    toast(saved ? "Photo enregistrée." : "Photo enregistrée sur votre compte. Pour qu'elle soit aussi visible par l'administration, appliquez le correctif SQL (table profiles).");
     fiche ? renderDash() : renderNew();
   } catch (err) { toast("Photo non enregistrée : " + err.message); }
 });
