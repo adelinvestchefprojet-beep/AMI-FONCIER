@@ -9,6 +9,7 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/docx@8.5.0/build/index.umd.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/exceljs@4.4.0/dist/exceljs.min.js"></script>
 <style>
 :root{--g:#0b6b3a;--gd:#084d2a;--gl:#e8f5ec;--y:#f4c20d;--r:#d62828;--ink:#14281d;--mu:#5d6f64;--bg:#f4f7f5;--card:#fff;--bd:#dbe5df}
 @media(prefers-color-scheme:dark){:root{--ink:#e8f1ec;--mu:#9fb3a7;--bg:#0f1a14;--card:#16251c;--bd:#27402f;--gl:#1b3326}}
@@ -677,17 +678,58 @@ function drawRows() {
 async function exportXlsx() {
   if (!ROWS.length) return toast("Aucun projet à exporter.");
   if (!(await logDl("Export Excel de tous les projets", null, "export"))) return;
-  const proj = ROWS.map(r => ({ "Catégorie": catName(r.categorie), "Titre": r.titre, "Type de projet": r.type_projet, "Localisation": r.localisation,
-    "Superficie (ha)": r.superficie, "Statut": label(r.statut), "Date d'enregistrement": fmt(r.created_at), "Prénom": r.client.prenom, "Nom": r.client.nom,
+  const proj = ROWS.map(r => ({ "Catégorie": catName(r.categorie), "Projet": r.titre, "Type de projet": r.type_projet, "Localisation": r.localisation,
+    "Superficie (ha)": num(r.superficie), "Statut": label(r.statut), "Date": fmt(r.created_at), "Prénom": r.client.prenom, "Nom": r.client.nom,
     "E-mail": r.client.email, "Téléphone": r.client.telephone, "Description": r.description }));
   const cli = PROFS.map(u => ({ "Prénom": u.prenom, "Nom": u.nom, "E-mail": u.email, "Téléphone": u.telephone, "Rôle": u.role, "Catégorie choisie": catName(u.categorie_souhaitee), "Inscrit le": fmt(u.created_at) }));
   const syn = [...Object.keys(CATS).map(k => { const l = ROWS.filter(r => r.categorie === k); return { "Indicateur": "Catégorie : " + catName(k), "Projets": l.length, "Superficie (ha)": l.reduce((a, r) => a + num(r.superficie), 0) }; }),
     ...STEPS.map(s => ({ "Indicateur": "Statut : " + s[1], "Projets": ROWS.filter(r => r.statut === s[0]).length, "Superficie (ha)": ROWS.filter(r => r.statut === s[0]).reduce((a, r) => a + num(r.superficie), 0) })),
     { "Indicateur": "TOTAL", "Projets": ROWS.length, "Superficie (ha)": ROWS.reduce((a, r) => a + num(r.superficie), 0) }];
-  const sheet = rows => { const ws = XLSX.utils.json_to_sheet(rows); ws["!cols"] = Object.keys(rows[0] || {}).map(k => ({ wch: Math.min(45, Math.max(k.length, ...rows.map(r => String(r[k] ?? "").length)) + 2) })); return ws; };
-  const wb = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(wb, sheet(syn), "Synthèse"); XLSX.utils.book_append_sheet(wb, sheet(proj), "Projets"); XLSX.utils.book_append_sheet(wb, sheet(cli), "Clients");
-  XLSX.writeFile(wb, "ADEL-INVEST-projets-" + new Date().toISOString().slice(0, 10) + ".xlsx");
+  await xlsxStyled("ADEL-INVEST-projets-" + new Date().toISOString().slice(0, 10) + ".xlsx", [
+    { name: "Synthèse", title: "Synthèse des projets fonciers", rows: syn, widths: [44, 14, 18] },
+    { name: "Projets", title: "Liste des projets fonciers", rows: proj, widths: [32, 34, 22, 24, 16, 22, 13, 16, 16, 30, 18, 50] },
+    { name: "Clients", title: "Liste des utilisateurs", rows: cli, widths: [16, 16, 32, 18, 14, 32, 13] }]);
+}
+
+// Export Excel mis en forme : titre, en-têtes colorés, filtres, lignes alternées, volets figés
+async function xlsxStyled(fileName, sheets) {
+  const wb = new ExcelJS.Workbook(); wb.creator = "ADEL INVEST"; wb.created = new Date();
+  const thin = { style: "thin", color: { argb: "FFDBE5DF" } }, box = { top: thin, left: thin, bottom: thin, right: thin };
+  const STC = { "Projet enregistré": ["FFFFF4C2", "FF7A5C00"], "En cours d'étude": ["FFDFF2E5", "FF0B6B3A"], "Validation en cours": ["FFFDE2E2", "FFA31D1D"], "Projet approuvé": ["FF0B6B3A", "FFFFFFFF"] };
+  for (const s of sheets) {
+    const keys = Object.keys(s.rows[0] || {}), n = keys.length || 1;
+    const ws = wb.addWorksheet(s.name, { views: [{ state: "frozen", ySplit: 3, showGridLines: false }],
+      pageSetup: { orientation: "landscape", paperSize: 9, fitToPage: true, fitToWidth: 1, fitToHeight: 0, margins: { left: .4, right: .4, top: .5, bottom: .5, header: .2, footer: .2 } } });
+    ws.mergeCells(1, 1, 1, n);
+    const t = ws.getCell(1, 1); t.value = "ADEL INVEST – " + s.title;
+    t.font = { name: "Calibri", size: 16, bold: true, color: { argb: "FFFFFFFF" } };
+    t.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FF0B6B3A" } };
+    t.alignment = { vertical: "middle", horizontal: "left", indent: 1 }; ws.getRow(1).height = 32;
+    ws.mergeCells(2, 1, 2, n);
+    const st = ws.getCell(2, 1); st.value = "Ensemble pour un foncier sécurisé  ·  généré le " + new Date().toLocaleDateString("fr-FR") + " à " + new Date().toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" }) + "  ·  " + s.rows.length + " ligne(s)";
+    st.font = { name: "Calibri", size: 10, italic: true, color: { argb: "FF084D2A" } };
+    st.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFF4C20D" } };
+    st.alignment = { vertical: "middle", horizontal: "left", indent: 1 }; ws.getRow(2).height = 20;
+    const hr = ws.getRow(3); hr.height = 26;
+    keys.forEach((k, i) => { const c = hr.getCell(i + 1); c.value = k;
+      c.font = { name: "Calibri", size: 11, bold: true, color: { argb: "FFFFFFFF" } };
+      c.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FF084D2A" } };
+      c.alignment = { vertical: "middle", horizontal: "center", wrapText: true }; c.border = box;
+      ws.getColumn(i + 1).width = (s.widths || [])[i] || 20; });
+    s.rows.forEach((r, ri) => {
+      const row = ws.getRow(4 + ri), total = String(Object.values(r)[0] || "") === "TOTAL";
+      keys.forEach((k, i) => { const c = row.getCell(i + 1), v = r[k];
+        c.value = v === undefined || v === null || v === "" ? "—" : v;
+        c.font = { name: "Calibri", size: 10, bold: total, color: { argb: "FF14281D" } };
+        c.border = box; c.alignment = { vertical: "top", wrapText: true, horizontal: typeof v === "number" ? "right" : "left" };
+        c.fill = { type: "pattern", pattern: "solid", fgColor: { argb: total ? "FFE8F5EC" : ri % 2 ? "FFF4F7F5" : "FFFFFFFF" } };
+        if (typeof v === "number") c.numFmt = "#,##0.##";
+        if (STC[v]) { c.fill = { type: "pattern", pattern: "solid", fgColor: { argb: STC[v][0] } }; c.font = { name: "Calibri", size: 10, bold: true, color: { argb: STC[v][1] } }; c.alignment = { vertical: "top", horizontal: "center" }; } });
+    });
+    if (s.rows.length) ws.autoFilter = { from: { row: 3, column: 1 }, to: { row: 3 + s.rows.length, column: n } };
+  }
+  const buf = await wb.xlsx.writeBuffer();
+  saveFile(new Blob([buf], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" }), fileName);
 }
 
 async function exportDoc(r) {
@@ -773,11 +815,11 @@ function drawJour() {
   $("jtb").innerHTML = "<tr>" + ["Jour", "Heure", "Qui", "Rôle", "Fichier", "Type"].map(h => `<th>${h}</th>`).join("") + "</tr>" +
     (l.map(x => `<tr><td>${esc(jDate(x.created_at))}</td><td>${esc(jHeure(x.created_at))}</td><td>${esc(x.nom_complet || "—")}<small>${esc(x.email || "")}</small></td><td>${esc(x.role || "")}</td><td>${esc(x.fichier || "")}</td><td>${esc(x.type || "")}</td></tr>`).join("") || '<tr><td colspan="6" style="color:var(--mu)">Aucun téléchargement enregistré.</td></tr>');
 }
-function exportJour() {
+async function exportJour() {
   const l = jFiltered(); if (!l.length) return toast("Rien à exporter.");
-  const ws = XLSX.utils.json_to_sheet(l.map(x => ({ "Jour": jDate(x.created_at), "Heure": jHeure(x.created_at), "Nom": x.nom_complet, "E-mail": x.email, "Rôle": x.role, "Fichier": x.fichier, "Type": x.type })));
-  const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, "Journal");
-  XLSX.writeFile(wb, "ADEL-INVEST-journal-" + new Date().toISOString().slice(0, 10) + ".xlsx");
+  await xlsxStyled("ADEL-INVEST-journal-" + new Date().toISOString().slice(0, 10) + ".xlsx", [{ name: "Journal", title: "Journal des téléchargements",
+    rows: l.map(x => ({ "Jour": jDate(x.created_at), "Heure": jHeure(x.created_at), "Nom": x.nom_complet, "E-mail": x.email, "Rôle": x.role, "Fichier": x.fichier, "Type": x.type })),
+    widths: [26, 12, 24, 32, 14, 44, 14] }]);
 }
 
 $("grid").addEventListener("click", async e => {
