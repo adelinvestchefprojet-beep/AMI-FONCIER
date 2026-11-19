@@ -3,10 +3,12 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://cdnjs.cloudflare.com; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https:; connect-src 'self' https://slrqktjjusmvzusbevbr.supabase.co wss://slrqktjjusmvzusbevbr.supabase.co; object-src 'none'; base-uri 'self'; form-action 'self'">
 <title>ADEL INVEST – Espace porteur de projet</title>
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 viewBox=%270 0 64 64%27%3E%3Crect width=%2764%27 height=%2764%27 rx=%2714%27 fill=%27%230b6b3a%27/%3E%3Ctext x=%2732%27 y=%2744%27 font-size=%2738%27 text-anchor=%27middle%27 fill=%27white%27 font-family=%27Arial%27 font-weight=%27bold%27%3EA%3C/text%3E%3C/svg%3E">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/docx@8.5.0/build/index.umd.js"></script>
 <style>
 :root{--g:#0b6b3a;--gd:#084d2a;--gl:#e8f5ec;--y:#f4c20d;--r:#d62828;--ink:#14281d;--mu:#5d6f64;--bg:#f4f7f5;--card:#fff;--bd:#dbe5df}
 @media(prefers-color-scheme:dark){:root{--ink:#e8f1ec;--mu:#9fb3a7;--bg:#0f1a14;--card:#16251c;--bd:#27402f;--gl:#1b3326}}
@@ -14,8 +16,8 @@
 button{font:inherit;cursor:pointer}a{color:inherit}
 .hide{display:none!important}
 /* login */
-#login,#signup{max-width:440px;margin:6vh auto;background:var(--card);padding:28px;border-radius:14px;border:1px solid var(--bd)}
-#login h1,#signup h1{margin:0 0 4px;color:var(--g);font-size:24px}
+#login,#signup,#sup,#recovery{max-width:440px;margin:6vh auto;background:var(--card);padding:28px;border-radius:14px;border:1px solid var(--bd)}
+#login h1,#signup h1,#sup h1,#recovery h1{margin:0 0 4px;color:var(--g);font-size:24px}
 input,select,textarea{width:100%;padding:10px 12px;margin:6px 0 12px;border:1px solid var(--bd);border-radius:8px;background:var(--card);color:var(--ink);font:inherit}
 .btn{background:var(--g);color:#fff;border:0;padding:10px 16px;border-radius:8px;font-weight:600}
 .btn.o{background:transparent;color:var(--g);border:1.5px solid var(--g)}
@@ -102,6 +104,7 @@ th{color:var(--mu);font-weight:600}td small{display:block;color:var(--mu)}td .bt
 .chip{display:inline-block;padding:2px 10px;border-radius:99px;font-size:12px;font-weight:700;white-space:nowrap}
 .s-enregistre{background:#fff4c2;color:#7a5c00}.s-etude{background:#dff2e5;color:#0b6b3a}.s-validation{background:#fde2e2;color:#a31d1d}.s-approuve{background:#0b6b3a;color:#fff}
 .cn{display:inline-flex;align-items:center;gap:6px}
+.pwd-hint{font-size:12px;color:var(--mu);margin:-6px 0 10px}
 @media(max-width:1000px){.dash>.c4,.dash>.c6{grid-column:span 12}}
 @media(max-width:900px){#app{grid-template-columns:1fr}aside{flex-direction:row;overflow-x:auto}.logo{display:none}.grid,.pbody,.three{grid-template-columns:1fr}.hist{grid-template-columns:26px 1fr}.labs{margin-left:36px}.labs small:nth-child(even){visibility:hidden}}
 @media print{aside,.space,.btn,.acts,.banner,select,input{display:none!important}#app{display:block}.grid{padding:0}}
@@ -115,7 +118,29 @@ th{color:var(--mu);font-weight:600}td small{display:block;color:var(--mu)}td .bt
   <label>Mot de passe<input id="pw" type="password" required autocomplete="current-password"></label>
   <div class="err" id="lerr"></div>
   <button class="btn" style="width:100%">Se connecter</button>
-  <p style="text-align:center;margin:14px 0 0"><a href="#" id="toSignup" style="color:var(--g);font-weight:600">Nouveau ? Créer mon espace</a></p>
+  <p style="text-align:center;margin:14px 0 0"><a href="#" id="toForgot" style="color:var(--mu)">Mot de passe oublié ?</a></p>
+  <p style="text-align:center;margin:8px 0 0"><a href="#" id="toSignup" style="color:var(--g);font-weight:600">Nouveau ? Créer mon espace</a></p>
+  <p style="text-align:center;margin:8px 0 0"><a href="#" id="toSup" style="color:var(--mu);font-size:13px">Accès superviseur</a></p>
+</form>
+
+<form id="sup" class="hide">
+  <h1>Accès superviseur</h1><p style="color:var(--mu);margin-top:0">Réservé aux superviseurs autorisés d'ADEL INVEST. Utilisez votre e-mail professionnel et votre propre mot de passe.</p>
+  <label>Prénom<input id="u_pre" autocomplete="given-name"></label>
+  <label>Nom<input id="u_nom" autocomplete="family-name"></label>
+  <label>E-mail<input id="u_em" type="email" required autocomplete="email"></label>
+  <label>Mot de passe<input id="u_pw" type="password" required autocomplete="current-password"></label>
+  <div class="pwd-hint">Première inscription : 8 caractères minimum, avec lettres et chiffres.</div>
+  <label>Code d'accès superviseur<input id="u_code" type="password" required autocomplete="off"></label>
+  <div class="err" id="uerr"></div>
+  <button class="btn" style="width:100%">Accéder à la supervision</button>
+  <p style="text-align:center;margin:14px 0 0"><a href="#" id="supBack" style="color:var(--g);font-weight:600">Retour à la connexion</a></p>
+</form>
+
+<form id="recovery" class="hide">
+  <h1>Nouveau mot de passe</h1><p style="color:var(--mu);margin-top:0">Choisissez un nouveau mot de passe (8 caractères minimum, lettres et chiffres).</p>
+  <label>Nouveau mot de passe<input id="r_pw" type="password" minlength="8" required autocomplete="new-password"></label>
+  <div class="err" id="rerr"></div>
+  <button class="btn" style="width:100%">Enregistrer</button>
 </form>
 
 <form id="signup" style="max-width:640px">
@@ -133,7 +158,7 @@ th{color:var(--mu);font-weight:600}td small{display:block;color:var(--mu)}td .bt
   <label>Nom<input id="s_nom" required autocomplete="family-name"></label>
   <label>Téléphone<input id="s_tel" type="tel" autocomplete="tel" placeholder="+221 77 123 45 67"></label>
   <label>E-mail<input id="s_em" type="email" required autocomplete="email"></label>
-  <label>Mot de passe (6 caractères minimum)<input id="s_pw" type="password" minlength="6" required autocomplete="new-password"></label>
+  <label>Mot de passe (8 caractères minimum, lettres et chiffres)<input id="s_pw" type="password" minlength="8" required autocomplete="new-password"></label>
   <div class="err" id="serr"></div>
   <button class="btn" style="width:100%">Enregistrer mon projet et créer mon espace</button>
   <p style="text-align:center;margin:14px 0 0"><a href="#" id="toLogin" style="color:var(--g);font-weight:600">J'ai déjà un compte</a></p>
@@ -143,6 +168,7 @@ th{color:var(--mu);font-weight:600}td small{display:block;color:var(--mu)}td .bt
   <aside>
     <div class="logo">ADEL INVEST<small>Ensemble pour un foncier sécurisé</small></div>
     <a class="on" href="#" data-v="dash">Tableau de bord</a><a href="#" data-v="projet">Mon projet</a><a href="#" data-v="docs">Mes documents</a>
+    <a href="#" data-v="archivage" id="mArch" class="hide">Archivage</a><a href="#" data-v="journal" id="mJour" class="hide">Journal des téléchargements</a>
     <a href="#" data-v="messages">Mes messages</a><a href="#" data-v="actualites">Actualités</a><a href="#" data-v="support">Support</a><a href="#" data-v="settings">Paramètres</a>
     <a href="#" id="out">Déconnexion</a>
   </aside>
@@ -163,7 +189,7 @@ const SUPABASE_ANON_KEY = "sb_publishable_xZ12ITUoSmqtY2axXDX29g_UPDco3Lk";
 // =======================
 const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 const $ = id => document.getElementById(id);
-const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 const CATS = {
   A:["Propriétaire / détenteur de terres","Vendre, louer ou prêter votre terre."],
   B:["Chercheur de terres","Acheter, louer ou exploiter une terre."],
@@ -172,9 +198,13 @@ const CATS = {
 };
 const STEPS = [["enregistre","Projet enregistré"],["etude","En cours d'étude"],["validation","Validation en cours"],["approuve","Projet approuvé"]];
 const fmt = d => d ? new Date(d).toLocaleDateString("fr-FR") : "";
+const pwOK = p => String(p || "").length >= 8 && /[A-Za-z]/.test(p) && /\d/.test(p);
+const PW_MSG = "Mot de passe trop faible : 8 caractères minimum, avec des lettres et des chiffres.";
+const DOCX_MIME = "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
 let user, profile, fiche, chosen = "A";
+let recovering = /type=recovery/.test(location.hash);
 
-// ===== Sélecteur d'espace (super admin / admin / client) =====
+// ===== Sélecteur d'espace =====
 const SPACES = { super_admin: "Espace super admin", admin: "Espace admin", client: "Espace client", lecteur: "Supervision (lecture seule)" };
 let space = null;
 function allowedSpaces() {
@@ -192,42 +222,106 @@ function setupSpaceSwitcher() {
 }
 $("spaceSel").onchange = e => { space = e.target.value; navigate("dash"); };
 
+// ===== Sécurité des connexions =====
+async function secureSignIn(email, password) {
+  const em = String(email).trim().toLowerCase();
+  const lk = await sb.rpc("check_login", { p_email: em });
+  if (lk.data === true) return { locked: true, error: { message: "locked" } };
+  const r = await sb.auth.signInWithPassword({ email: em, password });
+  if (r.error) { await sb.rpc("record_login", { p_email: em, p_ok: false }); return { error: r.error }; }
+  await sb.rpc("record_login", { p_email: em, p_ok: true });
+  return r;
+}
+const LOCK_MSG = "Trop de tentatives. Réessayez dans 15 minutes.";
+const BAD_MSG = "E-mail ou mot de passe incorrect.";
+const DUP_MSG = "Un compte existe déjà avec cet e-mail. Connectez-vous ou réinitialisez votre mot de passe.";
+const isDup = (data, error) => (error && /already|registered|exists/i.test(error.message)) || (data?.user && Array.isArray(data.user.identities) && data.user.identities.length === 0);
+function showForm(id) { ["login", "signup", "sup", "recovery"].forEach(f => $(f).classList.toggle("hide", f !== id)); }
+
 let sCat = "A";
 function drawSCats() {
   $("sCats").innerHTML = Object.entries(CATS).map(([k, v]) =>
     `<button type="button" class="cat ${k === sCat ? "on" : ""}" data-k="${k}"><span class="letter">${k}</span><b>${v[0]}</b><span>${v[1]}</span></button>`).join("");
   $("sCats").querySelectorAll(".cat").forEach(b => b.onclick = () => { sCat = b.dataset.k; drawSCats(); });
 }
-$("toSignup").onclick = e => { e.preventDefault(); $("login").classList.add("hide"); $("signup").classList.remove("hide"); drawSCats(); };
-$("toLogin").onclick = e => { e.preventDefault(); $("signup").classList.add("hide"); $("login").classList.remove("hide"); };
+$("toSignup").onclick = e => { e.preventDefault(); showForm("signup"); drawSCats(); };
+$("toLogin").onclick = e => { e.preventDefault(); showForm("login"); };
+$("toSup").onclick = e => { e.preventDefault(); showForm("sup"); };
+$("supBack").onclick = e => { e.preventDefault(); showForm("login"); };
+$("toForgot").onclick = async e => {
+  e.preventDefault(); const em = $("em").value.trim();
+  $("lerr").style.color = ""; 
+  if (!em) { $("lerr").textContent = "Saisissez votre e-mail, puis cliquez à nouveau."; return; }
+  await sb.rpc("log_security_event", { p_email: em, p_event: "reset_demande" });
+  await sb.auth.resetPasswordForEmail(em, { redirectTo: location.origin + location.pathname });
+  $("lerr").style.color = "var(--g)";
+  $("lerr").textContent = "Si un compte existe avec cet e-mail, un message de réinitialisation vient d'être envoyé.";
+};
+$("recovery").onsubmit = async e => {
+  e.preventDefault(); $("rerr").textContent = "";
+  if (!pwOK($("r_pw").value)) { $("rerr").textContent = PW_MSG; return; }
+  const { error } = await sb.auth.updateUser({ password: $("r_pw").value });
+  if (error) { $("rerr").textContent = "Modification impossible : " + error.message; return; }
+  recovering = false; history.replaceState(null, "", location.pathname); start();
+};
+
 $("signup").onsubmit = async e => {
   e.preventDefault(); $("serr").textContent = "";
   const email = $("s_em").value.trim(), password = $("s_pw").value;
+  if (!pwOK(password)) { $("serr").textContent = PW_MSG; return; }
   const projet = { categorie: sCat, titre: $("s_titre").value.trim(), type_projet: $("s_type").value, localisation: $("s_loc").value,
     superficie: $("s_sup").value || null, description: $("s_desc").value, statut: "enregistre" };
+  const client = { prenom: $("s_pre").value, nom: $("s_nom").value, telephone: $("s_tel").value, email };
   const { data, error } = await sb.auth.signUp({
     email, password,
-    options: { data: { prenom: $("s_pre").value, nom: $("s_nom").value, telephone: $("s_tel").value, categorie: sCat } }
+    options: { data: { prenom: client.prenom, nom: client.nom, telephone: client.telephone, categorie: sCat } }
   });
+  if (isDup(data, error)) {
+    await sb.rpc("log_security_event", { p_email: email, p_event: "inscription_doublon" });
+    $("serr").textContent = DUP_MSG; return;
+  }
   if (error) { $("serr").textContent = "Inscription impossible : " + error.message; return; }
   let session = data.session;
   if (!session) { const r = await sb.auth.signInWithPassword({ email, password }); session = r.data?.session; }
   if (!session) {
-    // Confirmation e-mail exigée : le projet est gardé et enregistré à la première connexion.
+    // Confirmation e-mail exigée : le projet est gardé et enregistré à la première connexion confirmée.
     try { localStorage.setItem("adel_pending_" + email.toLowerCase(), JSON.stringify(projet)); } catch {}
-    $("signup").classList.add("hide"); $("login").classList.remove("hide");
+    showForm("login");
     $("lerr").style.color = "var(--g)";
     $("lerr").textContent = "Compte créé. Confirmez votre e-mail, puis connectez-vous : votre projet sera enregistré.";
     return;
   }
-  const ins = await sb.from("fiches").insert({ user_id: session.user.id, ...projet });
+  const ins = await sb.from("fiches").insert({ user_id: session.user.id, ...projet }).select().single();
   if (ins.error) toast("Projet non enregistré : " + ins.error.message);
+  else await archiver(ins.data, client);
   start();
 };
 $("login").onsubmit = async e => {
   e.preventDefault(); $("lerr").style.color = ""; $("lerr").textContent = "";
-  const { error } = await sb.auth.signInWithPassword({ email: $("em").value, password: $("pw").value });
-  if (error) $("lerr").textContent = "Connexion impossible : " + error.message; else start();
+  const r = await secureSignIn($("em").value, $("pw").value);
+  if (r.locked) $("lerr").textContent = LOCK_MSG;
+  else if (r.error) $("lerr").textContent = BAD_MSG;
+  else start();
+};
+$("sup").onsubmit = async e => {
+  e.preventDefault(); $("uerr").textContent = "";
+  const email = $("u_em").value.trim().toLowerCase(), pw = $("u_pw").value, code = $("u_code").value;
+  let session = null;
+  const si = await secureSignIn(email, pw);
+  if (si.locked) { $("uerr").textContent = LOCK_MSG; return; }
+  if (si.data?.session) session = si.data.session;
+  else {
+    if (!pwOK(pw)) { $("uerr").textContent = "Accès refusé. Première inscription : mot de passe de 8 caractères minimum, lettres et chiffres."; return; }
+    if (!$("u_pre").value.trim() || !$("u_nom").value.trim()) { $("uerr").textContent = "Indiquez votre prénom et votre nom pour la première inscription."; return; }
+    const su = await sb.auth.signUp({ email, password: pw, options: { data: { prenom: $("u_pre").value.trim(), nom: $("u_nom").value.trim() } } });
+    if (isDup(su.data, su.error)) { $("uerr").textContent = "Accès refusé. Vérifiez votre mot de passe."; return; }
+    if (su.error) { $("uerr").textContent = "Accès refusé."; return; }
+    session = su.data.session;
+    if (!session) { $("uerr").style.color = "var(--g)"; $("uerr").textContent = "Compte créé. Confirmez votre e-mail, puis revenez ici avec le même code."; return; }
+  }
+  const cl = await sb.rpc("claim_superviseur", { p_code: code });
+  if (cl.error || cl.data !== true) { await sb.auth.signOut(); $("uerr").textContent = "Accès refusé."; return; }
+  start();
 };
 function toast(msg) {
   let t = $("toast");
@@ -238,7 +332,6 @@ function toast(msg) {
 }
 window.addEventListener("error", e => toast("Erreur : " + e.message));
 window.addEventListener("unhandledrejection", e => toast("Erreur : " + (e.reason?.message || e.reason)));
-// Navigation principale : chaque entrée ouvre une véritable page dans l'espace.
 function setActiveMenu(view) {
   document.querySelectorAll("aside a[data-v]").forEach(a => a.classList.toggle("on", a.dataset.v === view));
 }
@@ -267,7 +360,7 @@ async function renderDataPage(title, table, intro, ownOnly=false) {
 }
 const DOCS_BUCKET = "documents";
 const MAX_DOC_SIZE = 10 * 1024 * 1024;
-const DOC_MIME_TYPES = ["application/pdf", "image/jpeg", "image/png", "application/msword", "application/vnd.openxmlformats-officedocument.wordprocessingml.document", "application/vnd.ms-excel", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"];
+const DOC_MIME_TYPES = ["application/pdf", "image/jpeg", "image/png", "application/msword", DOCX_MIME, "application/vnd.ms-excel", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"];
 function safeFileName(name) {
   return String(name || "document").normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-zA-Z0-9._-]/g, "_").slice(-120);
 }
@@ -334,15 +427,17 @@ async function renderSettings() {
 }
 async function navigate(view) {
   setActiveMenu(view);
-  const adm = isAdminSpace();
-  // Sous-titre et menu selon l'espace actif
+  const adm = isAdminSpace(), sa = space === "super_admin";
   $("subHello").textContent = space === "super_admin" ? "Espace super administrateur"
     : space === "admin" ? "Espace administrateur" : space === "lecteur" ? "Espace de supervision (lecture seule)" : "Bienvenue sur votre espace porteur de projet";
   document.querySelectorAll('aside a[data-v="projet"],aside a[data-v="docs"]').forEach(a => a.classList.toggle("hide", adm));
+  $("mArch").classList.toggle("hide", !sa); $("mJour").classList.toggle("hide", !sa);
   if (view === "dash" || view === "projet") {
     if (adm) return renderAdmin();
     return fiche ? renderDash() : renderNew();
   }
+  if (view === "archivage") return sa ? renderArchivage() : navigate("dash");
+  if (view === "journal") return sa ? renderJournal() : navigate("dash");
   if (view === "docs") return renderDocumentsPage();
   if (view === "messages") return renderDataPage("Mes messages", "messages", "Messages accessibles selon les règles de sécurité Supabase.");
   if (view === "actualites") return renderDataPage("Actualités", "actualites", "Informations et actualités publiées sur ADEL INVEST.");
@@ -353,6 +448,7 @@ document.querySelectorAll("aside a[data-v]").forEach(a => a.onclick = e => { e.p
 $("out").onclick = async e => { e.preventDefault(); await sb.auth.signOut(); location.reload(); };
 
 async function start() {
+  if (recovering) { showForm("recovery"); return; }
   const { data: { session } } = await sb.auth.getSession();
   if (!session) return;
   user = session.user;
@@ -360,7 +456,7 @@ async function start() {
   profile = p.data || {};
   if (!profile.avatar_url && user.user_metadata?.avatar_url) profile.avatar_url = user.user_metadata.avatar_url;
   if (profile.categorie_souhaitee) chosen = profile.categorie_souhaitee;
-  $("login").classList.add("hide"); $("signup").classList.add("hide"); $("app").classList.remove("hide");
+  ["login", "signup", "sup", "recovery"].forEach(f => $(f).classList.add("hide")); $("app").classList.remove("hide");
   const name = [profile.prenom, profile.nom].filter(Boolean).join(" ") || user.email;
   $("hello").textContent = "Bonjour " + name;
   const f = await sb.from("fiches").select("*").eq("user_id", user.id).order("created_at", { ascending: false }).limit(1);
@@ -370,7 +466,7 @@ async function start() {
       const k = "adel_pending_" + (user.email || "").toLowerCase(), raw = localStorage.getItem(k);
       if (raw) {
         const ins = await sb.from("fiches").insert({ user_id: user.id, ...JSON.parse(raw) }).select().limit(1);
-        if (!ins.error) { localStorage.removeItem(k); fiche = ins.data?.[0]; }
+        if (!ins.error) { localStorage.removeItem(k); fiche = ins.data?.[0]; if (fiche) await archiver(fiche, { prenom: profile.prenom, nom: profile.nom, telephone: profile.telephone, email: user.email }); }
       }
     } catch {}
   }
@@ -404,16 +500,78 @@ async function save() {
   const row = { user_id: user.id, categorie: chosen, titre: $("f_titre").value, type_projet: $("f_type").value,
     localisation: $("f_loc").value, superficie: $("f_sup").value || null, description: $("f_desc").value, statut: "enregistre" };
   if (!row.titre) { $("ferr").textContent = "Le titre est obligatoire."; return; }
-  const { error } = await sb.from("fiches").insert(row);
+  const { data, error } = await sb.from("fiches").insert(row).select().single();
   if (error) { $("ferr").textContent = "Erreur : " + error.message; return; }
+  await archiver(data, { prenom: profile.prenom, nom: profile.nom, telephone: profile.telephone, email: user.email });
   start();
 }
 
-// ===== ADMIN / SUPER ADMIN / SUPERVISION : TABLEAU DE BORD DÉCISIONNEL =====
-let ROWS = [], PROFS = [], isSup = false;
+// ===== FICHE WORD (.docx, A4 portrait) =====
 const nom = u => [u.prenom, u.nom].filter(Boolean).join(" ") || "—";
 const label = s => (STEPS.find(x => x[0] === s) || [])[1] || s || "—";
 const catName = k => CATS[k]?.[0] || "—";
+async function buildDocx(r, c, names) {
+  const D = docx, GREEN = "0B6B3A", LIGHT = "E8F5EC", YEL = "F4C20D", W = 9638; // A4 (11906) - 2 x 2 cm de marges
+  const bd = { style: D.BorderStyle.SINGLE, size: 4, color: "DBE5DF" }, borders = { top: bd, bottom: bd, left: bd, right: bd };
+  const margins = { top: 80, bottom: 80, left: 120, right: 120 };
+  const t = (x, o = {}) => new D.TextRun({ text: String(x ?? ""), font: "Calibri", size: 22, ...o });
+  const kvRow = (k, v) => new D.TableRow({ children: [
+    new D.TableCell({ width: { size: 3000, type: D.WidthType.DXA }, borders, margins, shading: { type: D.ShadingType.CLEAR, fill: LIGHT, color: "auto" }, children: [new D.Paragraph({ children: [t(k, { bold: true, color: "084D2A" })] })] }),
+    new D.TableCell({ width: { size: W - 3000, type: D.WidthType.DXA }, borders, margins, children: [new D.Paragraph({ children: [t(v || "—")] })] })] });
+  const kv = rows => new D.Table({ width: { size: W, type: D.WidthType.DXA }, columnWidths: [3000, W - 3000], rows: rows.map(x => kvRow(x[0], x[1])) });
+  const h = x => new D.Paragraph({ spacing: { before: 300, after: 120 }, border: { bottom: { style: D.BorderStyle.SINGLE, size: 12, color: YEL, space: 2 } }, children: [t(x, { bold: true, size: 28, color: GREEN })] });
+  const idx = Math.max(0, STEPS.findIndex(s => s[0] === r.statut)), cw = [2409, 2409, 2410, 2410];
+  const stepsT = new D.Table({ width: { size: W, type: D.WidthType.DXA }, columnWidths: cw, rows: [new D.TableRow({ children: STEPS.map((s, i) =>
+    new D.TableCell({ width: { size: cw[i], type: D.WidthType.DXA }, borders: { top: { style: D.BorderStyle.SINGLE, size: 12, color: "FFFFFF" }, bottom: { style: D.BorderStyle.SINGLE, size: 12, color: "FFFFFF" }, left: { style: D.BorderStyle.SINGLE, size: 12, color: "FFFFFF" }, right: { style: D.BorderStyle.SINGLE, size: 12, color: "FFFFFF" } }, margins,
+      shading: { type: D.ShadingType.CLEAR, fill: i <= idx ? GREEN : "E5E9E7", color: "auto" },
+      children: [new D.Paragraph({ alignment: D.AlignmentType.CENTER, children: [t((i + 1) + ". " + s[1], { size: 18, bold: true, color: i <= idx ? "FFFFFF" : "5D6F64" })] })] })) })] });
+  const header = new D.Header({ children: [new D.Paragraph({
+    shading: { type: D.ShadingType.CLEAR, fill: GREEN, color: "auto" },
+    border: { bottom: { style: D.BorderStyle.SINGLE, size: 24, color: YEL, space: 4 } }, spacing: { after: 120 },
+    children: [t("  ADEL INVEST", { bold: true, size: 36, color: "FFFFFF" }), t("    Ensemble pour un foncier sécurisé", { size: 18, color: "FFFFFF" })] })] });
+  const footer = new D.Footer({ children: [new D.Paragraph({ alignment: D.AlignmentType.CENTER, children: [
+    t("ADEL INVEST – Fiche projet foncier – Page ", { size: 16, color: "5D6F64" }),
+    new D.TextRun({ children: [D.PageNumber.CURRENT], font: "Calibri", size: 16, color: "5D6F64" }), t(" / ", { size: 16, color: "5D6F64" }),
+    new D.TextRun({ children: [D.PageNumber.TOTAL_PAGES], font: "Calibri", size: 16, color: "5D6F64" })] })] });
+  const doc = new D.Document({
+    creator: "ADEL INVEST", title: "Fiche projet – " + (r.titre || ""),
+    sections: [{ properties: { page: { size: { width: 11906, height: 16838 }, margin: { top: 1134, right: 1134, bottom: 1134, left: 1134, header: 567, footer: 567 } } },
+      headers: { default: header }, footers: { default: footer },
+      children: [
+        new D.Paragraph({ spacing: { before: 120, after: 60 }, children: [t("FICHE PROJET FONCIER", { bold: true, size: 20, color: "5D6F64" })] }),
+        new D.Paragraph({ spacing: { after: 40 }, children: [t(r.titre || "Projet", { bold: true, size: 40 })] }),
+        new D.Paragraph({ children: [t("Catégorie : " + catName(r.categorie), { color: "5D6F64" })] }),
+        h("Porteur de projet"), kv([["Nom complet", nom(c)], ["E-mail", c.email], ["Téléphone", c.telephone]]),
+        h("Le projet"), kv([["Type de projet", r.type_projet], ["Localisation", r.localisation], ["Superficie", r.superficie ? r.superficie + " hectares" : ""], ["Date d'enregistrement", fmt(r.created_at)], ["Statut actuel", label(r.statut)]]),
+        h("Avancement"), stepsT,
+        h("Description"), new D.Paragraph({ children: [t(r.description || "Aucune description.")] }),
+        h("Documents joints"),
+        ...((names && names.length) ? names.map(n => new D.Paragraph({ children: [t("• " + n.replace(/^\d+_/, ""))] })) : [new D.Paragraph({ children: [t("Aucun document.")] })]),
+        new D.Paragraph({ spacing: { before: 400 }, children: [t("Document généré le " + fmt(new Date()) + " – ADEL INVEST – contact@adel-invest.sn – +221 33 123 45 67", { size: 16, color: "5D6F64" })] })
+      ] }] });
+  return D.Packer.toBlob(doc);
+}
+
+// Archivage automatique de la fiche Word à chaque dépôt de projet
+async function archiver(f, client) {
+  try {
+    const blob = await buildDocx(f, client || {}, []);
+    const path = `${f.id}/fiche.docx`, nomF = "Fiche-" + safeFileName(f.titre || "projet") + ".docx";
+    const up = await sb.storage.from("archives").upload(path, blob, { contentType: DOCX_MIME, upsert: false });
+    if (up.error && !/exist|duplicate/i.test(up.error.message)) throw up.error;
+    await sb.from("archives").insert({ fiche_id: String(f.id), user_id: f.user_id, nom_fichier: nomF, chemin: path });
+  } catch (e) { console.warn("Archivage non effectué :", e); }
+}
+
+// Journal : chaque téléchargement du personnel est enregistré (qui, quoi, quand)
+async function logDl(fichier, ficheId, type) {
+  const { error } = await sb.rpc("log_telechargement", { p_fichier: fichier, p_fiche: ficheId ? String(ficheId) : null, p_type: type });
+  if (error) { toast("Téléchargement bloqué : journal indisponible (" + error.message + ")"); return false; }
+  return true;
+}
+
+// ===== ADMIN / SUPER ADMIN / SUPERVISION =====
+let ROWS = [], PROFS = [], isSup = false;
 const CATC = { A: "#0b6b3a", B: "#f4c20d", C: "#d62828", D: "#7cc89a" };
 const MOIS = ["janv.", "févr.", "mars", "avr.", "mai", "juin", "juil.", "août", "sept.", "oct.", "nov.", "déc."];
 const num = v => parseFloat(String(v ?? "").replace(",", ".")) || 0;
@@ -502,7 +660,7 @@ async function renderAdmin() {
   $("q").oninput = drawRows; $("fc").onchange = drawRows; $("fs").onchange = drawRows; $("xl").onclick = exportXlsx;
   drawRows();
   if (isSup) $("grid").querySelector(".dash").insertAdjacentHTML("beforeend", `<div class="card"><h4>Utilisateurs et rôles</h4><div style="overflow-x:auto"><table>${PROFS.map(u =>
-    `<tr><td>${esc(nom(u))}<small>${esc(u.email || "")}</small></td><td><select data-role="${u.id}" ${u.id === user.id ? "disabled" : ""}>${["porteur", "admin", "super_admin", "lecteur"].map(x => `<option ${x === u.role ? "selected" : ""}>${x}</option>`).join("")}</select></td></tr>`).join("")}</table></div></div>`);
+    `<tr><td>${esc(nom(u))}<small>${esc(u.email || "")}</small></td><td><select data-role="${esc(u.id)}" ${u.id === user.id ? "disabled" : ""}>${["porteur", "admin", "super_admin", "lecteur"].map(x => `<option ${x === u.role ? "selected" : ""}>${x}</option>`).join("")}</select></td></tr>`).join("")}</table></div></div>`);
 }
 
 function drawRows() {
@@ -512,12 +670,13 @@ function drawRows() {
   $("tb").innerHTML = "<tr>" + ["Porteur", "Catégorie", "Projet", "Localisation", "Ha", "Statut", "Date", ""].map(h => `<th>${h}</th>`).join("") + "</tr>" +
     (list.map(r => `<tr><td>${esc(nom(r.client))}<small>${esc(r.client.email || "")}</small></td><td><span class="cn"><i class="dot" style="background:${CATC[r.categorie] || "var(--bd)"}"></i>${esc(catName(r.categorie))}</span></td><td>${esc(r.titre)}</td>
     <td>${esc(r.localisation || "")}</td><td>${esc(r.superficie || "")}</td>
-    <td>${isSup ? `<select data-st="${r.id}">${STEPS.map(s => `<option value="${s[0]}" ${s[0] === r.statut ? "selected" : ""}>${s[1]}</option>`).join("")}</select>` : `<span class="chip s-${esc(r.statut)}">${esc(label(r.statut))}</span>`}</td>
-    <td>${fmt(r.created_at)}</td><td style="white-space:nowrap"><button class="btn o" data-w="${r.id}">Word</button>${isSup ? ` <button class="btn d" data-x="${r.id}" title="Supprimer">✕</button>` : ""}</td></tr>`).join("") || '<tr><td colspan="8" style="color:var(--mu)">Aucun projet.</td></tr>');
+    <td>${isSup ? `<select data-st="${esc(r.id)}">${STEPS.map(s => `<option value="${s[0]}" ${s[0] === r.statut ? "selected" : ""}>${s[1]}</option>`).join("")}</select>` : `<span class="chip s-${esc(r.statut)}">${esc(label(r.statut))}</span>`}</td>
+    <td>${fmt(r.created_at)}</td><td style="white-space:nowrap"><button class="btn o" data-w="${esc(r.id)}">Word</button> <button class="btn o" data-p="${esc(r.id)}">Pièces</button>${isSup ? ` <button class="btn d" data-x="${esc(r.id)}" title="Supprimer">✕</button>` : ""}</td></tr>`).join("") || '<tr><td colspan="8" style="color:var(--mu)">Aucun projet.</td></tr>');
 }
 
-function exportXlsx() {
+async function exportXlsx() {
   if (!ROWS.length) return toast("Aucun projet à exporter.");
+  if (!(await logDl("Export Excel de tous les projets", null, "export"))) return;
   const proj = ROWS.map(r => ({ "Catégorie": catName(r.categorie), "Titre": r.titre, "Type de projet": r.type_projet, "Localisation": r.localisation,
     "Superficie (ha)": r.superficie, "Statut": label(r.statut), "Date d'enregistrement": fmt(r.created_at), "Prénom": r.client.prenom, "Nom": r.client.nom,
     "E-mail": r.client.email, "Téléphone": r.client.telephone, "Description": r.description }));
@@ -532,34 +691,110 @@ function exportXlsx() {
 }
 
 async function exportDoc(r) {
-  const c = r.client;
-  // Documents joints : lus directement depuis le bucket Storage (userId/ficheId/)
+  const nomF = "Fiche-" + safeFileName(r.titre || "projet") + ".docx";
+  if (!(await logDl(nomF, r.id, "fiche_word"))) return;
   const dl = await sb.storage.from(DOCS_BUCKET).list(`${r.user_id}/${r.id}`, { limit: 100 });
-  const files = (dl.data || []).filter(f => f.name && f.id);
-  const idx = Math.max(0, STEPS.findIndex(s => s[0] === r.statut));
-  const kv = (k, v) => `<tr><td width="32%" style="padding:7px 10px;background:#e8f5ec;color:#084d2a;font-weight:bold;border-bottom:1px solid #ffffff">${k}</td><td style="padding:7px 10px;border-bottom:1px solid #dbe5df">${esc(v || "—")}</td></tr>`;
-  const h = t => `<p style="margin:22px 0 6px;font-size:14pt;font-weight:bold;color:#0b6b3a;border-bottom:2px solid #f4c20d;padding-bottom:3px">${t}</p>`;
-  const steps = STEPS.map((s, i) => `<td align="center" style="padding:8px 4px;font-size:10pt;background:${i <= idx ? "#0b6b3a" : "#e5e9e7"};color:${i <= idx ? "#ffffff" : "#5d6f64"};border:2px solid #ffffff">${i + 1}. ${s[1]}</td>`).join("");
-  const html = `<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:w="urn:schemas-microsoft-com:office:word" xmlns="http://www.w3.org/TR/REC-html40"><head><meta charset="utf-8"><title>Fiche projet</title></head>
-<body style="font-family:Calibri,Arial,sans-serif;font-size:11pt;color:#14281d">
-<table width="100%" cellspacing="0"><tr><td style="background:#0b6b3a;padding:18px 20px;color:#ffffff;border-bottom:6px solid #f4c20d"><span style="font-size:22pt;font-weight:bold">ADEL INVEST</span><br><span style="font-size:10pt">Ensemble pour un foncier sécurisé</span></td>
-<td align="right" style="background:#0b6b3a;padding:18px 20px;color:#f4c20d;border-bottom:6px solid #f4c20d;font-size:13pt;font-weight:bold">FICHE PROJET FONCIER</td></tr>
-</table>
-<p style="font-size:18pt;font-weight:bold;margin:18px 0 2px">${esc(r.titre)}</p>
-<p style="margin:0;color:#5d6f64">Catégorie : ${esc(catName(r.categorie))}</p>
-${h("Porteur de projet")}<table width="100%" cellspacing="0">${kv("Nom complet", nom(c))}${kv("E-mail", c.email)}${kv("Téléphone", c.telephone)}</table>
-${h("Le projet")}<table width="100%" cellspacing="0">${kv("Type de projet", r.type_projet)}${kv("Localisation", r.localisation)}${kv("Superficie", r.superficie ? r.superficie + " hectares" : "")}${kv("Date d'enregistrement", fmt(r.created_at))}${kv("Statut actuel", label(r.statut))}</table>
-${h("Avancement")}<table width="100%" cellspacing="0"><tr>${steps}</tr></table>
-${h("Description")}<p>${esc(r.description || "Aucune description.")}</p>
-${h("Documents joints")}<p>${files.map(x => "• " + esc(x.name.replace(/^\d+_/, ""))).join("<br>") || "Aucun document."}</p>
-<p style="margin-top:30px;font-size:9pt;color:#5d6f64;border-top:1px solid #dbe5df;padding-top:6px">Document généré le ${fmt(new Date())} – ADEL INVEST – contact@adel-invest.sn – +221 33 123 45 67</p></body></html>`;
-  saveFile(new Blob(["\ufeff", html], { type: "application/msword" }), "Fiche-" + (r.titre || "projet").replace(/[^\w\-]+/g, "_") + ".doc");
+  const names = (dl.data || []).filter(f => f.name && f.id).map(f => f.name);
+  saveFile(await buildDocx(r, r.client, names), nomF);
+}
+
+async function showPieces(r) {
+  const { data, error } = await sb.storage.from(DOCS_BUCKET).list(`${r.user_id}/${r.id}`, { limit: 100 });
+  if (error) return toast("Impossible de lister les pièces : " + error.message);
+  const files = (data || []).filter(f => f.name && f.id);
+  let dlg = $("piecesDlg");
+  if (!dlg) { dlg = document.createElement("dialog"); dlg.id = "piecesDlg";
+    dlg.style.cssText = "border:1px solid var(--bd);border-radius:12px;max-width:520px;width:92vw;background:var(--card);color:var(--ink)"; document.body.appendChild(dlg); }
+  dlg.innerHTML = `<h4 style="margin:0 0 10px;color:var(--g)">Pièces jointes – ${esc(r.titre)}</h4>` +
+    (files.length ? files.map((f, i) => `<div class="li"><div>${esc(f.name.replace(/^\d+_/, ""))}</div><button class="btn" data-pf="${i}">Télécharger</button></div>`).join("") : '<p style="color:var(--mu)">Aucune pièce jointe.</p>') +
+    `<p style="text-align:right;margin:12px 0 0"><button class="btn o" id="closePieces">Fermer</button></p>`;
+  $("closePieces").onclick = () => dlg.close();
+  dlg.querySelectorAll("button[data-pf]").forEach(b => b.onclick = async () => {
+    const f = files[Number(b.dataset.pf)];
+    if (!(await logDl(f.name.replace(/^\d+_/, ""), r.id, "document"))) return;
+    const s = await sb.storage.from(DOCS_BUCKET).createSignedUrl(`${r.user_id}/${r.id}/${f.name}`, 60, { download: f.name.replace(/^\d+_/, "") });
+    if (s.error) return toast("Ouverture impossible : " + s.error.message);
+    window.open(s.data.signedUrl, "_blank", "noopener,noreferrer");
+  });
+  dlg.showModal();
+}
+
+// ===== ARCHIVAGE (super admin) =====
+let ARCH = [];
+async function renderArchivage() {
+  $("grid").innerHTML = `<div class="card" style="grid-column:1/-1"><h4>Archivage</h4><p style="color:var(--mu)">Chargement…</p></div>`;
+  const [a, f, p] = await Promise.all([sb.from("archives").select("*").order("created_at", { ascending: false }),
+    sb.from("fiches").select("id,titre,categorie,localisation"), sb.from("profiles").select("id,prenom,nom,email")]);
+  if (a.error) { $("grid").innerHTML = `<div class="card" style="grid-column:1/-1"><h4>Archivage</h4><p class="err">${esc(a.error.message)}</p><p style="color:var(--mu)">Avez-vous exécuté le script SQL de sécurité ?</p></div>`; return; }
+  const fm = Object.fromEntries((f.data || []).map(x => [String(x.id), x])), pm = Object.fromEntries((p.data || []).map(x => [x.id, x]));
+  ARCH = a.data.map(x => ({ ...x, f: fm[x.fiche_id] || {}, c: pm[x.user_id] || {} }));
+  $("grid").innerHTML = `<div class="card" style="grid-column:1/-1"><div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;justify-content:space-between">
+    <h4 style="margin:0">Archivage des fiches Word (<span id="acnt"></span>)</h4>
+    <div style="display:flex;gap:8px;flex-wrap:wrap"><input id="aq" placeholder="Rechercher…" style="margin:0;width:200px">
+    <select id="ac" style="margin:0;width:auto"><option value="">Toutes les catégories</option>${Object.keys(CATS).map(k => `<option value="${k}">${esc(catName(k))}</option>`).join("")}</select>
+    <select id="as" style="margin:0;width:auto"><option value="d">Plus récentes d'abord</option><option value="a">Plus anciennes d'abord</option></select></div></div>
+    <div style="overflow-x:auto;margin-top:10px"><table id="atb"></table></div></div>`;
+  $("aq").oninput = drawArch; $("ac").onchange = drawArch; $("as").onchange = drawArch; drawArch();
+}
+function drawArch() {
+  const q = $("aq").value.toLowerCase(), c = $("ac").value, asc = $("as").value === "a";
+  let l = ARCH.filter(x => (!c || x.f.categorie === c) && JSON.stringify([x.f.titre, x.c.nom, x.c.prenom, x.c.email, x.nom_fichier]).toLowerCase().includes(q));
+  l.sort((x, y) => (new Date(x.created_at) - new Date(y.created_at)) * (asc ? 1 : -1));
+  $("acnt").textContent = l.length;
+  $("atb").innerHTML = "<tr>" + ["Date", "Porteur", "Catégorie", "Projet", "Fichier", ""].map(h => `<th>${h}</th>`).join("") + "</tr>" +
+    (l.map(x => `<tr><td>${fmt(x.created_at)}</td><td>${esc(nom(x.c))}<small>${esc(x.c.email || "")}</small></td><td>${esc(catName(x.f.categorie))}</td><td>${esc(x.f.titre || "—")}</td><td>${esc(x.nom_fichier)}</td><td><button class="btn" data-ar="${esc(x.id)}">Télécharger</button></td></tr>`).join("") || '<tr><td colspan="6" style="color:var(--mu)">Aucune fiche archivée.</td></tr>');
+}
+
+// ===== JOURNAL DES TÉLÉCHARGEMENTS (super admin) =====
+let JOUR = [];
+const jDate = d => new Date(d).toLocaleDateString("fr-FR", { weekday: "long", day: "2-digit", month: "long", year: "numeric" });
+const jHeure = d => new Date(d).toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit", second: "2-digit" });
+async function renderJournal() {
+  $("grid").innerHTML = `<div class="card" style="grid-column:1/-1"><h4>Journal des téléchargements</h4><p style="color:var(--mu)">Chargement…</p></div>`;
+  const { data, error } = await sb.from("journal_telechargements").select("*").order("created_at", { ascending: false }).limit(2000);
+  if (error) { $("grid").innerHTML = `<div class="card" style="grid-column:1/-1"><h4>Journal des téléchargements</h4><p class="err">${esc(error.message)}</p><p style="color:var(--mu)">Avez-vous exécuté le script SQL de sécurité ?</p></div>`; return; }
+  JOUR = data;
+  const who = [...new Map(JOUR.map(x => [x.email, x.nom_complet || x.email])).entries()];
+  $("grid").innerHTML = `<div class="card" style="grid-column:1/-1"><div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;justify-content:space-between">
+    <h4 style="margin:0">Journal des téléchargements (<span id="jcnt"></span>)</h4>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+    <select id="jw" style="margin:0;width:auto"><option value="">Toutes les personnes</option>${who.map(([e, n]) => `<option value="${esc(e)}">${esc(n)}</option>`).join("")}</select>
+    <input id="jd1" type="date" style="margin:0;width:auto"><input id="jd2" type="date" style="margin:0;width:auto">
+    <button class="btn" id="jxl">Exporter (Excel)</button></div></div>
+    <div style="overflow-x:auto;margin-top:10px"><table id="jtb"></table></div></div>`;
+  ["jw", "jd1", "jd2"].forEach(i => $(i).onchange = drawJour); $("jxl").onclick = exportJour; drawJour();
+}
+function jFiltered() {
+  const w = $("jw").value, d1 = $("jd1").value, d2 = $("jd2").value;
+  return JOUR.filter(x => (!w || x.email === w) && (!d1 || new Date(x.created_at) >= new Date(d1 + "T00:00:00")) && (!d2 || new Date(x.created_at) <= new Date(d2 + "T23:59:59")));
+}
+function drawJour() {
+  const l = jFiltered(); $("jcnt").textContent = l.length;
+  $("jtb").innerHTML = "<tr>" + ["Jour", "Heure", "Qui", "Rôle", "Fichier", "Type"].map(h => `<th>${h}</th>`).join("") + "</tr>" +
+    (l.map(x => `<tr><td>${esc(jDate(x.created_at))}</td><td>${esc(jHeure(x.created_at))}</td><td>${esc(x.nom_complet || "—")}<small>${esc(x.email || "")}</small></td><td>${esc(x.role || "")}</td><td>${esc(x.fichier || "")}</td><td>${esc(x.type || "")}</td></tr>`).join("") || '<tr><td colspan="6" style="color:var(--mu)">Aucun téléchargement enregistré.</td></tr>');
+}
+function exportJour() {
+  const l = jFiltered(); if (!l.length) return toast("Rien à exporter.");
+  const ws = XLSX.utils.json_to_sheet(l.map(x => ({ "Jour": jDate(x.created_at), "Heure": jHeure(x.created_at), "Nom": x.nom_complet, "E-mail": x.email, "Rôle": x.role, "Fichier": x.fichier, "Type": x.type })));
+  const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, "Journal");
+  XLSX.writeFile(wb, "ADEL-INVEST-journal-" + new Date().toISOString().slice(0, 10) + ".xlsx");
 }
 
 $("grid").addEventListener("click", async e => {
-  const b = e.target.closest("button[data-w],button[data-x]"); if (!b) return;
+  const b = e.target.closest("button[data-w],button[data-x],button[data-p],button[data-ar]"); if (!b) return;
   if (b.dataset.w) { b.disabled = true; try { await exportDoc(ROWS.find(r => r.id === b.dataset.w)); } finally { b.disabled = false; } }
-  else if (confirm("Supprimer définitivement ce projet ?")) {
+  else if (b.dataset.p) { await showPieces(ROWS.find(r => r.id === b.dataset.p)); }
+  else if (b.dataset.ar) {
+    const x = ARCH.find(a => a.id === b.dataset.ar); if (!x) return;
+    b.disabled = true;
+    try {
+      if (!(await logDl(x.nom_fichier, x.fiche_id, "archive"))) return;
+      const s = await sb.storage.from("archives").createSignedUrl(x.chemin, 60, { download: x.nom_fichier });
+      if (s.error) return toast("Ouverture impossible : " + s.error.message);
+      window.open(s.data.signedUrl, "_blank", "noopener,noreferrer");
+    } finally { b.disabled = false; }
+  }
+  else if (b.dataset.x && confirm("Supprimer définitivement ce projet ?")) {
     const { error } = await sb.from("fiches").delete().eq("id", b.dataset.x);
     if (error) return toast("Erreur : " + error.message);
     renderAdmin();
@@ -603,10 +838,8 @@ $("grid").addEventListener("change", async e => {
     const up = await sb.storage.from("avatars").upload(path, blob, { upsert: true, contentType: "image/jpeg" });
     if (up.error) throw up.error;
     const url = sb.storage.from("avatars").getPublicUrl(path).data.publicUrl + "?v=" + Date.now();
-    // 1) table profiles (visible par les admins) ; .select() permet de détecter un refus silencieux (RLS)
     const r = await sb.from("profiles").update({ avatar_url: url }).eq("id", user.id).select("id");
     const saved = !r.error && r.data && r.data.length > 0;
-    // 2) copie de sécurité dans le compte de connexion : la photo revient toujours à la reconnexion
     const m = await sb.auth.updateUser({ data: { avatar_url: url } });
     if (m.error && !saved) throw m.error;
     profile.avatar_url = url;
@@ -619,7 +852,6 @@ async function renderDash() {
   const idx = Math.max(0, STEPS.findIndex(s => s[0] === fiche.statut));
   const cat = CATS[fiche.categorie]?.[0] || "—";
   const folder = `${user.id}/${fiche.id}`;
-  // Les documents sont lus directement dans le bucket Storage (même emplacement que la page « Mes documents »)
   const [docsResult, notifs] = await Promise.all([
     sb.storage.from(DOCS_BUCKET).list(folder, { limit: 100, sortBy: { column: "created_at", order: "desc" } }),
     sb.from("notifications").select("*").eq("user_id", user.id).order("created_at", { ascending: false }).limit(3)
@@ -649,7 +881,6 @@ async function renderDash() {
       <div class="card"><h4>Mes notifications</h4>${(notifs.data || []).map(n => `<div class="li"><div>${esc(n.message)}<small>${fmt(n.created_at)}</small></div></div>`).join("") || '<p style="color:var(--mu)">Aucune notification.</p>'}</div>
     </div>`;
 
-  // Boutons d'ouverture / téléchargement des documents (lien signé valable 60 s)
   $("grid").querySelectorAll("button[data-dash-doc]").forEach(button => {
     button.addEventListener("click", async () => {
       const file = docs[Number(button.dataset.dashDoc)];
