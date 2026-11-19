@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://cdnjs.cloudflare.com; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https:; connect-src 'self' https://slrqktjjusmvzusbevbr.supabase.co wss://slrqktjjusmvzusbevbr.supabase.co; object-src 'none'; base-uri 'self'; form-action 'self'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://cdnjs.cloudflare.com; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https:; connect-src 'self' https://cdn.jsdelivr.net https://cdnjs.cloudflare.com https://slrqktjjusmvzusbevbr.supabase.co wss://slrqktjjusmvzusbevbr.supabase.co; object-src 'none'; base-uri 'self'; form-action 'self'">
 <title>ADEL INVEST – Espace porteur de projet</title>
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 viewBox=%270 0 64 64%27%3E%3Crect width=%2764%27 height=%2764%27 rx=%2714%27 fill=%27%230b6b3a%27/%3E%3Ctext x=%2732%27 y=%2744%27 font-size=%2738%27 text-anchor=%27middle%27 fill=%27white%27 font-family=%27Arial%27 font-weight=%27bold%27%3EA%3C/text%3E%3C/svg%3E">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
@@ -432,12 +432,12 @@ async function navigate(view) {
   $("subHello").textContent = space === "super_admin" ? "Espace super administrateur"
     : space === "admin" ? "Espace administrateur" : space === "lecteur" ? "Espace de supervision (lecture seule)" : "Bienvenue sur votre espace porteur de projet";
   document.querySelectorAll('aside a[data-v="projet"],aside a[data-v="docs"]').forEach(a => a.classList.toggle("hide", adm));
-  $("mArch").classList.toggle("hide", !sa); $("mJour").classList.toggle("hide", !sa);
+  $("mArch").classList.toggle("hide", !(sa || space === "lecteur")); $("mJour").classList.toggle("hide", !sa);
   if (view === "dash" || view === "projet") {
     if (adm) return renderAdmin();
     return fiche ? renderDash() : renderNew();
   }
-  if (view === "archivage") return sa ? renderArchivage() : navigate("dash");
+  if (view === "archivage") return (sa || space === "lecteur") ? renderArchivage() : navigate("dash");
   if (view === "journal") return sa ? renderJournal() : navigate("dash");
   if (view === "docs") return renderDocumentsPage();
   if (view === "messages") return renderDataPage("Mes messages", "messages", "Messages accessibles selon les règles de sécurité Supabase.");
@@ -761,30 +761,105 @@ async function showPieces(r) {
   dlg.showModal();
 }
 
-// ===== ARCHIVAGE (super admin) =====
-let ARCH = [];
+// ===== ARCHIVAGE (super admin : tout ; superviseur : lecture seule + téléchargement) =====
+let ARCH = [], PIECES = [], PIECES_LOADED = false, FICHES_ALL = [], PM_ALL = {}, archTab = "fiches";
 async function renderArchivage() {
+  archTab = "fiches"; PIECES_LOADED = false; PIECES = [];
   $("grid").innerHTML = `<div class="card" style="grid-column:1/-1"><h4>Archivage</h4><p style="color:var(--mu)">Chargement…</p></div>`;
   const [a, f, p] = await Promise.all([sb.from("archives").select("*").order("created_at", { ascending: false }),
-    sb.from("fiches").select("id,titre,categorie,localisation"), sb.from("profiles").select("id,prenom,nom,email")]);
+    sb.from("fiches").select("*"), sb.from("profiles").select("id,prenom,nom,email,telephone")]);
   if (a.error) { $("grid").innerHTML = `<div class="card" style="grid-column:1/-1"><h4>Archivage</h4><p class="err">${esc(a.error.message)}</p><p style="color:var(--mu)">Avez-vous exécuté le script SQL de sécurité ?</p></div>`; return; }
-  const fm = Object.fromEntries((f.data || []).map(x => [String(x.id), x])), pm = Object.fromEntries((p.data || []).map(x => [x.id, x]));
-  ARCH = a.data.map(x => ({ ...x, f: fm[x.fiche_id] || {}, c: pm[x.user_id] || {} }));
-  $("grid").innerHTML = `<div class="card" style="grid-column:1/-1"><div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;justify-content:space-between">
-    <h4 style="margin:0">Archivage des fiches Word (<span id="acnt"></span>)</h4>
-    <div style="display:flex;gap:8px;flex-wrap:wrap"><input id="aq" placeholder="Rechercher…" style="margin:0;width:200px">
-    <select id="ac" style="margin:0;width:auto"><option value="">Toutes les catégories</option>${Object.keys(CATS).map(k => `<option value="${k}">${esc(catName(k))}</option>`).join("")}</select>
-    <select id="as" style="margin:0;width:auto"><option value="d">Plus récentes d'abord</option><option value="a">Plus anciennes d'abord</option></select></div></div>
+  FICHES_ALL = f.data || []; PM_ALL = Object.fromEntries((p.data || []).map(x => [x.id, x]));
+  const fm = Object.fromEntries(FICHES_ALL.map(x => [String(x.id), x]));
+  ARCH = a.data.map(x => ({ ...x, f: fm[x.fiche_id] || {}, c: PM_ALL[x.user_id] || {} }));
+  drawArchShell();
+}
+function drawArchShell() {
+  const sa = space === "super_admin";
+  $("grid").innerHTML = `<div class="card" style="grid-column:1/-1">
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px">
+      <button class="btn ${archTab === "fiches" ? "" : "o"}" data-tab="fiches">Fiches Word (${ARCH.length})</button>
+      <button class="btn ${archTab === "pieces" ? "" : "o"}" data-tab="pieces">Pièces jointes${PIECES_LOADED ? " (" + PIECES.length + ")" : ""}</button>
+      ${sa ? `<button class="btn o" id="backfill" style="margin-left:auto">Archiver les projets existants</button>` : ""}
+    </div>
+    <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;justify-content:space-between">
+      <h4 style="margin:0">${archTab === "fiches" ? "Fiches Word remplies par les clients" : "Pièces jointes déposées par les clients"} (<span id="acnt"></span>)</h4>
+      <div style="display:flex;gap:8px;flex-wrap:wrap"><input id="aq" placeholder="Rechercher…" style="margin:0;width:200px">
+      <select id="ac" style="margin:0;width:auto"><option value="">Toutes les catégories</option>${Object.keys(CATS).map(k => `<option value="${k}">${esc(catName(k))}</option>`).join("")}</select>
+      <select id="as" style="margin:0;width:auto"><option value="d">Plus récentes d'abord</option><option value="a">Plus anciennes d'abord</option></select></div></div>
     <div style="overflow-x:auto;margin-top:10px"><table id="atb"></table></div></div>`;
-  $("aq").oninput = drawArch; $("ac").onchange = drawArch; $("as").onchange = drawArch; drawArch();
+  $("grid").querySelectorAll("button[data-tab]").forEach(b => b.onclick = async () => {
+    archTab = b.dataset.tab;
+    if (archTab === "pieces" && !PIECES_LOADED) { drawArchShell(); $("atb").innerHTML = "<tr><td>Chargement des pièces jointes…</td></tr>"; await loadPieces(); }
+    drawArchShell();
+  });
+  $("aq").oninput = drawArch; $("ac").onchange = drawArch; $("as").onchange = drawArch;
+  if (sa) $("backfill").onclick = backfillArchives;
+  drawArch();
+}
+async function loadPieces() {
+  const out = [];
+  for (let i = 0; i < FICHES_ALL.length; i += 10) {
+    await Promise.all(FICHES_ALL.slice(i, i + 10).map(async f => {
+      const r = await sb.storage.from(DOCS_BUCKET).list(`${f.user_id}/${f.id}`, { limit: 100 });
+      (r.data || []).filter(x => x.name && x.id).forEach(x => out.push({ f, c: PM_ALL[f.user_id] || {}, name: x.name, created_at: x.created_at || f.created_at, path: `${f.user_id}/${f.id}/${x.name}` }));
+    }));
+  }
+  PIECES = out; PIECES_LOADED = true;
 }
 function drawArch() {
   const q = $("aq").value.toLowerCase(), c = $("ac").value, asc = $("as").value === "a";
-  let l = ARCH.filter(x => (!c || x.f.categorie === c) && JSON.stringify([x.f.titre, x.c.nom, x.c.prenom, x.c.email, x.nom_fichier]).toLowerCase().includes(q));
-  l.sort((x, y) => (new Date(x.created_at) - new Date(y.created_at)) * (asc ? 1 : -1));
-  $("acnt").textContent = l.length;
-  $("atb").innerHTML = "<tr>" + ["Date", "Porteur", "Catégorie", "Projet", "Fichier", ""].map(h => `<th>${h}</th>`).join("") + "</tr>" +
-    (l.map(x => `<tr><td>${fmt(x.created_at)}</td><td>${esc(nom(x.c))}<small>${esc(x.c.email || "")}</small></td><td>${esc(catName(x.f.categorie))}</td><td>${esc(x.f.titre || "—")}</td><td>${esc(x.nom_fichier)}</td><td><button class="btn" data-ar="${esc(x.id)}">Télécharger</button></td></tr>`).join("") || '<tr><td colspan="6" style="color:var(--mu)">Aucune fiche archivée.</td></tr>');
+  const sort = (x, y) => (new Date(x.created_at) - new Date(y.created_at)) * (asc ? 1 : -1);
+  if (archTab === "fiches") {
+    const l = ARCH.filter(x => (!c || x.f.categorie === c) && JSON.stringify([x.f.titre, x.c.nom, x.c.prenom, x.c.email, x.nom_fichier]).toLowerCase().includes(q)).sort(sort);
+    $("acnt").textContent = l.length;
+    $("atb").innerHTML = "<tr>" + ["Date", "Porteur", "Catégorie", "Projet", "Fichier", ""].map(h => `<th>${h}</th>`).join("") + "</tr>" +
+      (l.map(x => `<tr><td>${fmt(x.created_at)}</td><td>${esc(nom(x.c))}<small>${esc(x.c.email || "")}</small></td><td>${esc(catName(x.f.categorie))}</td><td>${esc(x.f.titre || "—")}</td><td>${esc(x.nom_fichier)}</td><td><button class="btn" data-ar="${esc(x.id)}">Télécharger</button></td></tr>`).join("") || '<tr><td colspan="6" style="color:var(--mu)">Aucune fiche archivée.</td></tr>');
+  } else {
+    const l = PIECES.filter(x => (!c || x.f.categorie === c) && JSON.stringify([x.f.titre, x.c.nom, x.c.prenom, x.c.email, x.name]).toLowerCase().includes(q)).sort(sort);
+    $("acnt").textContent = l.length;
+    $("atb").innerHTML = "<tr>" + ["Date", "Porteur", "Catégorie", "Projet", "Fichier", ""].map(h => `<th>${h}</th>`).join("") + "</tr>" +
+      (l.map(x => `<tr><td>${fmt(x.created_at)}</td><td>${esc(nom(x.c))}<small>${esc(x.c.email || "")}</small></td><td>${esc(catName(x.f.categorie))}</td><td>${esc(x.f.titre || "—")}</td><td>${esc(x.name.replace(/^\d+_/, ""))}</td><td><button class="btn" data-ap="${PIECES.indexOf(x)}">Télécharger</button></td></tr>`).join("") || '<tr><td colspan="6" style="color:var(--mu)">Aucune pièce jointe.</td></tr>');
+  }
+}
+async function backfillArchives() {
+  const have = new Set(ARCH.map(a => String(a.fiche_id)));
+  const todo = FICHES_ALL.filter(f => !have.has(String(f.id)));
+  if (!todo.length) return toast("Tous les projets sont déjà archivés.");
+  if (!confirm(`Générer et archiver la fiche Word de ${todo.length} projet(s) existant(s) ?`)) return;
+  let ok = 0;
+  for (const f of todo) {
+    try {
+      const dl = await sb.storage.from(DOCS_BUCKET).list(`${f.user_id}/${f.id}`, { limit: 100 });
+      const names = (dl.data || []).filter(x => x.name && x.id).map(x => x.name);
+      const blob = await buildDocx(f, PM_ALL[f.user_id] || {}, names), path = `${f.id}/fiche.docx`;
+      const up = await sb.storage.from("archives").upload(path, blob, { contentType: DOCX_MIME, upsert: false });
+      if (up.error && !/exist|duplicate/i.test(up.error.message)) throw up.error;
+      const ins = await sb.from("archives").insert({ fiche_id: String(f.id), user_id: f.user_id, nom_fichier: "Fiche-" + safeFileName(f.titre || "projet") + ".docx", chemin: path });
+      if (ins.error) throw ins.error; ok++;
+    } catch (e) { console.warn("Archivage rattrapage :", e); }
+  }
+  toast(`${ok} / ${todo.length} projet(s) archivé(s).`); renderArchivage();
+}
+
+// ===== Ma fiche Word (côté client) =====
+async function loadMaFiche() {
+  const box = $("maFiche"); if (!box || !fiche) return;
+  const a = await sb.from("archives").select("*").eq("fiche_id", String(fiche.id)).order("created_at", { ascending: false }).limit(1);
+  const x = a.data?.[0];
+  box.innerHTML = x
+    ? `<div class="li"><div><b>📄 Ma fiche projet</b><small>${esc(x.nom_fichier)} · ${fmt(x.created_at)}</small></div><button class="btn" id="dlFiche" type="button">Télécharger</button></div>`
+    : `<div class="li"><div><b>📄 Ma fiche projet</b><small>Pas encore générée</small></div><button class="btn" id="mkFiche" type="button">Générer ma fiche</button></div>`;
+  if (x) $("dlFiche").onclick = async () => {
+    const s = await sb.storage.from("archives").createSignedUrl(x.chemin, 60, { download: x.nom_fichier });
+    if (s.error) return toast("Ouverture impossible : " + s.error.message);
+    window.open(s.data.signedUrl, "_blank", "noopener,noreferrer");
+  };
+  else $("mkFiche").onclick = async () => {
+    $("mkFiche").disabled = true;
+    await archiver(fiche, { prenom: profile.prenom, nom: profile.nom, telephone: profile.telephone, email: user.email });
+    loadMaFiche();
+  };
 }
 
 // ===== JOURNAL DES TÉLÉCHARGEMENTS (super admin) =====
@@ -823,7 +898,7 @@ async function exportJour() {
 }
 
 $("grid").addEventListener("click", async e => {
-  const b = e.target.closest("button[data-w],button[data-x],button[data-p],button[data-ar]"); if (!b) return;
+  const b = e.target.closest("button[data-w],button[data-x],button[data-p],button[data-ar],button[data-ap],button[data-tab]"); if (!b || b.dataset.tab) return;
   if (b.dataset.w) { b.disabled = true; try { await exportDoc(ROWS.find(r => r.id === b.dataset.w)); } finally { b.disabled = false; } }
   else if (b.dataset.p) { await showPieces(ROWS.find(r => r.id === b.dataset.p)); }
   else if (b.dataset.ar) {
@@ -834,6 +909,17 @@ $("grid").addEventListener("click", async e => {
       const s = await sb.storage.from("archives").createSignedUrl(x.chemin, 60, { download: x.nom_fichier });
       if (s.error) return toast("Ouverture impossible : " + s.error.message);
       window.open(s.data.signedUrl, "_blank", "noopener,noreferrer");
+    } finally { b.disabled = false; }
+  }
+  else if (b.dataset.ap) {
+    const x = PIECES[Number(b.dataset.ap)]; if (!x) return;
+    b.disabled = true;
+    try {
+      const fn = x.name.replace(/^\d+_/, "");
+      if (!(await logDl(fn, x.f.id, "document"))) return;
+      const s2 = await sb.storage.from(DOCS_BUCKET).createSignedUrl(x.path, 60, { download: fn });
+      if (s2.error) return toast("Ouverture impossible : " + s2.error.message);
+      window.open(s2.data.signedUrl, "_blank", "noopener,noreferrer");
     } finally { b.disabled = false; }
   }
   else if (b.dataset.x && confirm("Supprimer définitivement ce projet ?")) {
@@ -911,7 +997,7 @@ async function renderDash() {
       <button class="btn o" id="addd">Joindre des documents</button><button class="btn d" id="del">Supprimer mon projet</button></div></div>
       <div class="steps">${steps}</div></div></div>
     <div class="three">
-      <div class="card" id="docs"><h4>Mes documents</h4>${
+      <div class="card" id="docs"><h4>Mes documents</h4><div id="maFiche"></div>${
         docsError
           ? `<p class="err">Erreur : ${esc(docsError.message)}</p>`
           : docs.length
@@ -935,6 +1021,7 @@ async function renderDash() {
     });
   });
 
+  loadMaFiche();
   $("del").onclick = async () => {
     if (!confirm("Supprimer définitivement ce projet ?")) return;
     await sb.from("fiches").delete().eq("id", fiche.id); start();
