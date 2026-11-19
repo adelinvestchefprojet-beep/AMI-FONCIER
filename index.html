@@ -938,11 +938,16 @@ function drawRows() {
   const q = $("q").value.toLowerCase(), c = $("fc").value, s = $("fs").value;
   const list = ROWS.filter(r => (!c || r.categorie === c) && (!s || r.statut === s) && JSON.stringify([r.titre, r.localisation, r.client.nom, r.client.prenom, r.client.email, catName(r.categorie)]).toLowerCase().includes(q));
   $("cnt").textContent = list.length;
-  $("tb").innerHTML = "<tr>" + ["Porteur", "Catégorie", "Projet", "Localisation", "Ha", "Statut", "Date", ""].map(h => `<th>${h}</th>`).join("") + "</tr>" +
-    (list.map(r => `<tr><td>${esc(nom(r.client))}<small>${esc(r.client.email || "")}</small></td><td><span class="cn"><i class="dot" style="background:${CATC[r.categorie] || "var(--bd)"}"></i>${esc(catName(r.categorie))}</span></td><td>${esc(r.titre)}</td>
-    <td>${esc(r.localisation || "")}</td><td>${esc(r.superficie || "")}</td>
-    <td>${isSup ? `<select data-st="${esc(r.id)}">${STEPS.map(s => `<option value="${s[0]}" ${s[0] === r.statut ? "selected" : ""}>${s[1]}</option>`).join("")}</select>` : `<span class="chip s-${esc(r.statut)}">${esc(label(r.statut))}</span>`}</td>
-    <td>${fmt(r.created_at)}</td><td style="white-space:nowrap"><button class="btn o" data-w="${esc(r.id)}">Word</button> <button class="btn o" data-p="${esc(r.id)}">Pièces</button>${isSup ? ` <button class="btn d" data-x="${esc(r.id)}" title="Supprimer">✕</button>` : ""}</td></tr>`).join("") || '<tr><td colspan="8" style="color:var(--mu)">Aucun projet.</td></tr>');
+  $("tb").innerHTML = "<tr>" + ["Porteur", "Catégorie", "Projet", "Localisation", "Ha", "Statut", "Date", "Actions / contact"].map(h => `<th>${h}</th>`).join("") + "</tr>" +
+    (list.map(r => {
+      const clientName = nom(r.client) || "Client";
+      const waMessage = `Bonjour ${clientName}, nous vous contactons depuis ADEL INVEST au sujet de votre projet « ${r.titre || "Projet foncier"} » (référence ${r.id}).`;
+      const waHref = whatsappUrl(r.client.telephone, waMessage);
+      return `<tr><td>${esc(clientName)}<small>${esc(r.client.email || "")}</small><small>${esc(r.client.telephone || "Téléphone non renseigné")}</small></td><td><span class="cn"><i class="dot" style="background:${CATC[r.categorie] || "var(--bd)"}"></i>${esc(catName(r.categorie))}</span></td><td>${esc(r.titre)}</td>
+      <td>${esc(r.localisation || "")}</td><td>${esc(r.superficie || "")}</td>
+      <td>${isSup ? `<select data-st="${esc(r.id)}">${STEPS.map(s => `<option value="${s[0]}" ${s[0] === r.statut ? "selected" : ""}>${s[1]}</option>`).join("")}</select>` : `<span class="chip s-${esc(r.statut)}">${esc(label(r.statut))}</span>`}</td>
+      <td>${fmt(r.created_at)}</td><td style="white-space:nowrap"><button class="btn o" data-w="${esc(r.id)}">Word</button> <button class="btn o" data-p="${esc(r.id)}">Pièces</button>${waHref ? ` <a class="wa-link" href="${esc(waHref)}" target="_blank" rel="noopener noreferrer">WhatsApp</a>` : ` <span style="font-size:12px;color:var(--mu)">N° absent</span>`}${isSup ? ` <button class="btn d" data-x="${esc(r.id)}" title="Supprimer">✕</button>` : ""}</td></tr>`;
+    }).join("") || '<tr><td colspan="8" style="color:var(--mu)">Aucun projet.</td></tr>');
 }
 
 async function exportXlsx() {
