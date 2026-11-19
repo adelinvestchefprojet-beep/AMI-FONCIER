@@ -436,7 +436,7 @@ async function renderSettings() {
 }
 
 // ===== MESSAGERIE CLIENT / SUPERVISEUR / SUPER ADMIN =====
-// Table messages : id, user_id, sender_id, body, is_read, created_at.
+// Table messages : id, sender_id, recipient_id, subject, content, is_read, created_at.
 // Table journal_communications : journalise les prises de contact WhatsApp.
 let activeMessageClientId = null;
 
@@ -469,59 +469,40 @@ async function logWhatsAppContact(clientId, phone, body) {
   const { error } = await sb.from("journal_communications").insert(payload);
   if (error) throw error;
 }
+
+const msgText = m => m?.content ?? "";
+const clientOf = (m, profiles) => profiles[m.sender_id]?.role === "porteur" ? m.sender_id : m.recipient_id;
+async function getSupervisorId() {
+  const { data, error } = await sb.from("profiles").select("id").in("role", ["admin", "super_admin"]).limit(1);
+  if (error || !data?.length) throw new Error("Aucun superviseur disponible.");
+  return data[0].id;
+}
+
 async function renderMessages() {
   const admin = isMessageAdmin();
   const readOnly = space === "lecteur";
   $("grid").innerHTML = `<div class="card" style="grid-column:1/-1"><h4>${admin ? "Messagerie – clients" : "Mes messages"}</h4><p style="color:var(--mu)">Chargement des conversations…</p></div>`;
 
- 
-if (!admin) {
-    const { data, error } = await sb.from("messages")
-      .select("*")
-      .or(`sender_id.eq.${user.id},recipient_id.eq.${user.id}`)
-      .order("created_at", { ascending: true })
-      .limit(300);
-
+  if (!admin) {
+    const { data, error } = await sb.from("messages").select("*")
+      .or(`sender_id.eq.${user.id},recipient_id.eq.${user.id}`).order("created_at", { ascending: true }).limit(300);
     if (error) {
-      $("grid").innerHTML = `<div class="card" style="grid-column:1/-1">
-        <h4>Mes messages</h4>
-        <p class="err">Impossible de charger vos messages : ${esc(error.message)}</p>
-        <p style="color:var(--mu)">Vérifiez les politiques de sécurité Supabase.</p>
-      </div>`;
+      $("grid").innerHTML = `<div class="card" style="grid-column:1/-1"><h4>Mes messages</h4><p class="err">Impossible de charger vos messages : ${esc(error.message)}</p><p style="color:var(--mu)">Vérifiez la table messages et ses politiques de sécurité Supabase.</p></div>`;
       return;
     }
-
-    const messages = data || [];
-
-    // Marquer comme lus uniquement les messages reçus
-    const unread = messages.filter(m =>
-      m.recipient_id === user.id && !m.read_at
-    );
-
-    for (const m of unread) {
-      const { error: readError } = await sb.from("messages")
-        .update({ read_at: new Date().toISOString() })
-        .eq("id", m.id)
-        .eq("recipient_id", user.id);
-
-      if (readError) {
-        console.error("Erreur marquage comme lu :", readError);
-      }
-    }
-
+    const unread = (data || []).filter(m => m.sender_id !== user.id && !m.is_read);
+    if (unread.length) await sb.from("messages").update({ is_read: true })
+      .eq("recipient_id", user.id).eq("is_read", false);
     $("grid").innerHTML = `<div class="card" style="grid-column:1/-1">
       <h4>Ma conversation avec ADEL INVEST</h4>
       <p style="color:var(--mu)">Envoyez une demande, posez une question et suivez les réponses de votre superviseur dans cet espace sécurisé.</p>
-
       <div id="messageThread" style="display:grid;gap:10px;margin:14px 0">
-        ${messages.map(m => `<div class="msg-bubble ${m.sender_id === user.id ? "mine" : "theirs"}">
+        ${(data || []).map(m => `<div class="msg-bubble ${m.sender_id === user.id ? "mine" : "theirs"}">
           <b>${m.sender_id === user.id ? "Vous" : "ADEL INVEST / Supervision"}</b>
-          <div style="white-space:pre-wrap;margin:6px 0">${esc(m.content || "")}</div>
+          <div style="white-space:pre-wrap;margin:6px 0">${esc(msgText(m))}</div>
           <small style="color:var(--mu)">${messageTime(m.created_at)}</small>
         </div>`).join("") || `<p style="color:var(--mu)">Aucun message pour le moment. Envoyez votre première demande.</p>`}
       </div>
-    </div>`;
-}
       <form id="sendClientMessage" style="border-top:1px solid var(--bd);padding-top:14px">
         <label for="clientMessageBody">Écrire un message</label>
         <textarea id="clientMessageBody" rows="4" maxlength="5000" required placeholder="Bonjour, je souhaite avoir des informations sur mon projet…"></textarea>
@@ -535,9 +516,14 @@ if (!admin) {
       if (!body) return;
       const btn = $("sendClientMessageBtn");
       btn.disabled = true; btn.textContent = "Envoi en cours…";
-      const { error: sendError } = await sb.from("messages").insert({
-        user_id: user.id, sender_id: user.id, body, is_read: false
-      });
+      let sendError = null;
+      try {
+        const supervisorId = await getSupervisorId();
+        ({ error: sendError } = await sb.from("messages").insert({
+          sender_id: user.id, recipient_id: supervisorId,
+          subject: "Échange ADEL INVEST", content: body
+        }));
+      } catch (err) { sendError = err; }
       if (sendError) {
         $("messageError").textContent = "Envoi impossible : " + sendError.message;
         btn.disabled = false; btn.textContent = "Envoyer le message";
@@ -560,8 +546,10 @@ if (!admin) {
   const profiles = Object.fromEntries((pr.data || []).map(p => [p.id, p]));
   const byClient = new Map();
   (mr.data || []).forEach(m => {
-    if (!byClient.has(m.user_id)) byClient.set(m.user_id, []);
-    byClient.get(m.user_id).push(m);
+    const cid = clientOf(m, profiles);
+    if (!cid) return;
+    if (!byClient.has(cid)) byClient.set(cid, []);
+    byClient.get(cid).push(m);
   });
   // Afficher aussi les porteurs de projet qui n'ont pas encore initié de conversation,
   // afin que le superviseur puisse les contacter en premier.
@@ -588,7 +576,7 @@ if (!admin) {
           const nm = [p.prenom,p.nom].filter(Boolean).join(" ") || p.email || "Client";
           return `<button type="button" data-message-client="${esc(id)}" class="cat ${id === activeMessageClientId ? "on" : ""}" style="display:block;width:100%;margin:6px 0;text-align:left">
             <b>${esc(nm)} ${pending ? `(${pending} non lu${pending > 1 ? "s" : ""})` : ""}</b>
-            <span>${esc(String(last?.body || "Aucun échange pour le moment").slice(0,75))}</span><span>${last ? messageTime(last.created_at) : "Nouvelle conversation"}</span>
+            <span>${esc(String(msgText(last) || "Aucun échange pour le moment").slice(0,75))}</span><span>${last ? messageTime(last.created_at) : "Nouvelle conversation"}</span>
           </button>`;
         }).join("") || `<p style="color:var(--mu)">Aucun message client pour le moment.</p>`}
       </section>
@@ -599,7 +587,7 @@ if (!admin) {
           <div style="display:grid;gap:9px;max-height:420px;overflow:auto;padding:4px 0" id="adminMessageThread">
             ${selected.map(m => `<div class="msg-bubble ${m.sender_id === activeMessageClientId ? "theirs" : "mine"}">
               <b>${m.sender_id === activeMessageClientId ? "Client" : "Supervision ADEL INVEST"}</b>
-              <div style="white-space:pre-wrap;margin:5px 0">${esc(m.body)}</div><small style="color:var(--mu)">${messageTime(m.created_at)}</small>
+              <div style="white-space:pre-wrap;margin:5px 0">${esc(msgText(m))}</div><small style="color:var(--mu)">${messageTime(m.created_at)}</small>
             </div>`).join("")}
           </div>
           ${readOnly ? `<p style="color:var(--mu)">Mode lecture seule : vous pouvez consulter les échanges, mais pas répondre ni contacter le client.</p>` : `<form id="replyAdminMessage" style="border-top:1px solid var(--bd);padding-top:12px;margin-top:12px">
@@ -623,7 +611,7 @@ if (!admin) {
   });
   if (activeMessageClientId) {
     await sb.from("messages").update({ is_read: true })
-      .eq("user_id", activeMessageClientId).eq("is_read", false);
+      .eq("sender_id", activeMessageClientId).eq("is_read", false);
     if (!readOnly) {
       $("replyAdminMessage").onsubmit = async e => {
         e.preventDefault();
@@ -632,7 +620,8 @@ if (!admin) {
         const btn = $("sendAdminReply");
         btn.disabled = true; btn.textContent = "Envoi…";
         const { error: sendError } = await sb.from("messages").insert({
-          user_id: activeMessageClientId, sender_id: user.id, body, is_read: false
+          sender_id: user.id, recipient_id: activeMessageClientId,
+          subject: "Réponse ADEL INVEST", content: body
         });
         if (sendError) {
           $("adminMessageError").textContent = "Envoi impossible : " + sendError.message;
@@ -679,7 +668,7 @@ async function renderCommunicationJournal() {
   const [jr, mr, pr] = await Promise.all([
     sb.from("journal_communications").select("*").order("created_at", {ascending:false}).limit(2000),
     sb.from("messages").select("*").order("created_at", {ascending:false}).limit(3000),
-    sb.from("profiles").select("id,prenom,nom,email")
+    sb.from("profiles").select("id,prenom,nom,email,role")
   ]);
   if (jr.error || mr.error || pr.error) {
     const err = jr.error || mr.error || pr.error;
@@ -689,7 +678,7 @@ async function renderCommunicationJournal() {
   const profs = Object.fromEntries((pr.data || []).map(p => [p.id,p]));
   const rows = [
     ...(jr.data || []).map(r => ({...r, kind:"WhatsApp", clientId:r.client_user_id, actorId:r.supervisor_id, created_at:r.created_at, content:r.body, status:r.status || "Contact initié"})),
-    ...(mr.data || []).map(m => ({...m, kind:"Messagerie ADEL", clientId:m.user_id, actorId:m.sender_id, created_at:m.created_at, content:m.body, status:m.is_read ? "Lu" : "Non lu"}))
+    ...(mr.data || []).map(m => ({...m, kind:"Messagerie ADEL", clientId:clientOf(m, profs), actorId:m.sender_id, created_at:m.created_at, content:m.content, status:m.is_read ? "Lu" : "Non lu"}))
   ].sort((a,b) => new Date(b.created_at) - new Date(a.created_at));
   $("grid").innerHTML = `<div class="card" style="grid-column:1/-1">
     <div style="display:flex;justify-content:space-between;gap:10px;align-items:center;flex-wrap:wrap">
