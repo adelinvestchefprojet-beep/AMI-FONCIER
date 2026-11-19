@@ -474,26 +474,54 @@ async function renderMessages() {
   const readOnly = space === "lecteur";
   $("grid").innerHTML = `<div class="card" style="grid-column:1/-1"><h4>${admin ? "Messagerie – clients" : "Mes messages"}</h4><p style="color:var(--mu)">Chargement des conversations…</p></div>`;
 
-  if (!admin) {
-    const { data, error } = await sb.from("messages").select("*")
-      .eq("user_id", user.id).order("created_at", { ascending: true }).limit(300);
+ 
+if (!admin) {
+    const { data, error } = await sb.from("messages")
+      .select("*")
+      .or(`sender_id.eq.${user.id},recipient_id.eq.${user.id}`)
+      .order("created_at", { ascending: true })
+      .limit(300);
+
     if (error) {
-      $("grid").innerHTML = `<div class="card" style="grid-column:1/-1"><h4>Mes messages</h4><p class="err">Impossible de charger vos messages : ${esc(error.message)}</p><p style="color:var(--mu)">Vérifiez la table messages et ses politiques de sécurité Supabase.</p></div>`;
+      $("grid").innerHTML = `<div class="card" style="grid-column:1/-1">
+        <h4>Mes messages</h4>
+        <p class="err">Impossible de charger vos messages : ${esc(error.message)}</p>
+        <p style="color:var(--mu)">Vérifiez les politiques de sécurité Supabase.</p>
+      </div>`;
       return;
     }
-    const unread = (data || []).filter(m => m.sender_id !== user.id && !m.is_read);
-    if (unread.length) await sb.from("messages").update({ is_read: true })
-      .eq("user_id", user.id).neq("sender_id", user.id).eq("is_read", false);
+
+    const messages = data || [];
+
+    // Marquer comme lus uniquement les messages reçus
+    const unread = messages.filter(m =>
+      m.recipient_id === user.id && !m.read_at
+    );
+
+    for (const m of unread) {
+      const { error: readError } = await sb.from("messages")
+        .update({ read_at: new Date().toISOString() })
+        .eq("id", m.id)
+        .eq("recipient_id", user.id);
+
+      if (readError) {
+        console.error("Erreur marquage comme lu :", readError);
+      }
+    }
+
     $("grid").innerHTML = `<div class="card" style="grid-column:1/-1">
       <h4>Ma conversation avec ADEL INVEST</h4>
       <p style="color:var(--mu)">Envoyez une demande, posez une question et suivez les réponses de votre superviseur dans cet espace sécurisé.</p>
+
       <div id="messageThread" style="display:grid;gap:10px;margin:14px 0">
-        ${(data || []).map(m => `<div class="msg-bubble ${m.sender_id === user.id ? "mine" : "theirs"}">
+        ${messages.map(m => `<div class="msg-bubble ${m.sender_id === user.id ? "mine" : "theirs"}">
           <b>${m.sender_id === user.id ? "Vous" : "ADEL INVEST / Supervision"}</b>
-          <div style="white-space:pre-wrap;margin:6px 0">${esc(m.body)}</div>
+          <div style="white-space:pre-wrap;margin:6px 0">${esc(m.content || "")}</div>
           <small style="color:var(--mu)">${messageTime(m.created_at)}</small>
         </div>`).join("") || `<p style="color:var(--mu)">Aucun message pour le moment. Envoyez votre première demande.</p>`}
       </div>
+    </div>`;
+}
       <form id="sendClientMessage" style="border-top:1px solid var(--bd);padding-top:14px">
         <label for="clientMessageBody">Écrire un message</label>
         <textarea id="clientMessageBody" rows="4" maxlength="5000" required placeholder="Bonjour, je souhaite avoir des informations sur mon projet…"></textarea>
