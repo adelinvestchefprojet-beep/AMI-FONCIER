@@ -65,6 +65,14 @@ main{min-width:0}
 .cam:hover{background:var(--gd)}
 table{border-collapse:collapse;width:100%;font-size:14px}th,td{text-align:left;padding:8px;border-bottom:1px solid var(--bd);vertical-align:top}
 th{color:var(--mu);font-weight:600}td small{display:block;color:var(--mu)}td .btn{padding:6px 10px;font-size:13px}td select{margin:0;padding:6px}
+
+/* Messagerie et journal des échanges */
+.msg-toolbar{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin:10px 0}
+.msg-bubble{padding:11px 13px;border:1px solid var(--bd);border-radius:12px;max-width:88%;overflow-wrap:anywhere}
+.msg-bubble.mine{margin-left:auto;background:var(--gl)}
+.msg-bubble.theirs{margin-right:auto;background:var(--bg)}
+.wa-link{display:inline-flex;align-items:center;gap:7px;background:#128c4a;color:#fff!important;text-decoration:none;padding:9px 12px;border-radius:8px;font-weight:700;font-size:13px}
+.wa-link:hover{filter:brightness(.94)}
 /* catégories */
 .cats{display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:12px;margin:12px 0}
 .cat{border:2px solid var(--bd);border-radius:12px;padding:14px;background:var(--card);text-align:left;color:var(--ink)}
@@ -170,7 +178,7 @@ th{color:var(--mu);font-weight:600}td small{display:block;color:var(--mu)}td .bt
     <div class="logo">ADEL INVEST<small>Ensemble pour un foncier sécurisé</small></div>
     <a class="on" href="#" data-v="dash">Tableau de bord</a><a href="#" data-v="projet">Mon projet</a><a href="#" data-v="docs">Mes documents</a>
     <a href="#" data-v="archivage" id="mArch" class="hide">Archivage</a><a href="#" data-v="journal" id="mJour" class="hide">Journal des téléchargements</a>
-    <a href="#" data-v="messages">Mes messages</a><a href="#" data-v="actualites">Actualités</a><a href="#" data-v="support">Support</a><a href="#" data-v="settings">Paramètres</a>
+    <a href="#" data-v="messages">Mes messages</a><a href="#" data-v="journal_messages" id="mJournalMessages" class="hide">Journal des échanges</a><a href="#" data-v="actualites">Actualités</a><a href="#" data-v="support">Support</a><a href="#" data-v="settings">Paramètres</a>
     <a href="#" id="out">Déconnexion</a>
   </aside>
   <main>
@@ -426,21 +434,266 @@ async function renderSettings() {
     toast("Profil mis à jour.");
   };
 }
+
+// ===== MESSAGERIE CLIENT / SUPERVISEUR / SUPER ADMIN =====
+// Table messages : id, user_id, sender_id, body, is_read, created_at.
+// Table journal_communications : journalise les prises de contact WhatsApp.
+let activeMessageClientId = null;
+
+function messageTime(value) {
+  return value ? new Date(value).toLocaleString("fr-FR", { dateStyle: "short", timeStyle: "short" }) : "";
+}
+function isMessageAdmin() {
+  return space === "super_admin" || space === "admin" || space === "lecteur";
+}
+function whatsappNumber(raw) {
+  let n = String(raw || "").replace(/\D/g, "");
+  if (n.startsWith("00")) n = n.slice(2);
+  // Les numéros sénégalais saisis au format local (9 chiffres) sont normalisés en +221.
+  if (n.length === 9) n = "221" + n;
+  return n;
+}
+function whatsappUrl(phone, message) {
+  const n = whatsappNumber(phone);
+  return n ? `https://wa.me/${n}?text=${encodeURIComponent(message || "")}` : "";
+}
+async function logWhatsAppContact(clientId, phone, body) {
+  const payload = {
+    client_user_id: clientId,
+    supervisor_id: user.id,
+    channel: "whatsapp",
+    phone: String(phone || ""),
+    body: String(body || "").trim() || "Prise de contact WhatsApp",
+    status: "initie"
+  };
+  const { error } = await sb.from("journal_communications").insert(payload);
+  if (error) throw error;
+}
+async function renderMessages() {
+  const admin = isMessageAdmin();
+  const readOnly = space === "lecteur";
+  $("grid").innerHTML = `<div class="card" style="grid-column:1/-1"><h4>${admin ? "Messagerie – clients" : "Mes messages"}</h4><p style="color:var(--mu)">Chargement des conversations…</p></div>`;
+
+  if (!admin) {
+    const { data, error } = await sb.from("messages").select("*")
+      .eq("user_id", user.id).order("created_at", { ascending: true }).limit(300);
+    if (error) {
+      $("grid").innerHTML = `<div class="card" style="grid-column:1/-1"><h4>Mes messages</h4><p class="err">Impossible de charger vos messages : ${esc(error.message)}</p><p style="color:var(--mu)">Vérifiez la table messages et ses politiques de sécurité Supabase.</p></div>`;
+      return;
+    }
+    const unread = (data || []).filter(m => m.sender_id !== user.id && !m.is_read);
+    if (unread.length) await sb.from("messages").update({ is_read: true })
+      .eq("user_id", user.id).neq("sender_id", user.id).eq("is_read", false);
+    $("grid").innerHTML = `<div class="card" style="grid-column:1/-1">
+      <h4>Ma conversation avec ADEL INVEST</h4>
+      <p style="color:var(--mu)">Envoyez une demande, posez une question et suivez les réponses de votre superviseur dans cet espace sécurisé.</p>
+      <div id="messageThread" style="display:grid;gap:10px;margin:14px 0">
+        ${(data || []).map(m => `<div class="msg-bubble ${m.sender_id === user.id ? "mine" : "theirs"}">
+          <b>${m.sender_id === user.id ? "Vous" : "ADEL INVEST / Supervision"}</b>
+          <div style="white-space:pre-wrap;margin:6px 0">${esc(m.body)}</div>
+          <small style="color:var(--mu)">${messageTime(m.created_at)}</small>
+        </div>`).join("") || `<p style="color:var(--mu)">Aucun message pour le moment. Envoyez votre première demande.</p>`}
+      </div>
+      <form id="sendClientMessage" style="border-top:1px solid var(--bd);padding-top:14px">
+        <label for="clientMessageBody">Écrire un message</label>
+        <textarea id="clientMessageBody" rows="4" maxlength="5000" required placeholder="Bonjour, je souhaite avoir des informations sur mon projet…"></textarea>
+        <div class="err" id="messageError"></div>
+        <button class="btn" id="sendClientMessageBtn" type="submit">Envoyer le message</button>
+      </form>
+    </div>`;
+    $("sendClientMessage").onsubmit = async e => {
+      e.preventDefault();
+      const body = $("clientMessageBody").value.trim();
+      if (!body) return;
+      const btn = $("sendClientMessageBtn");
+      btn.disabled = true; btn.textContent = "Envoi en cours…";
+      const { error: sendError } = await sb.from("messages").insert({
+        user_id: user.id, sender_id: user.id, body, is_read: false
+      });
+      if (sendError) {
+        $("messageError").textContent = "Envoi impossible : " + sendError.message;
+        btn.disabled = false; btn.textContent = "Envoyer le message";
+        return;
+      }
+      await renderMessages();
+    };
+    return;
+  }
+
+  const [mr, pr] = await Promise.all([
+    sb.from("messages").select("*").order("created_at", { ascending: false }).limit(1000),
+    sb.from("profiles").select("id,prenom,nom,email,telephone,role")
+  ]);
+  if (mr.error || pr.error) {
+    const err = mr.error || pr.error;
+    $("grid").innerHTML = `<div class="card" style="grid-column:1/-1"><h4>Messagerie – clients</h4><p class="err">Chargement impossible : ${esc(err.message)}</p><p style="color:var(--mu)">Vérifiez les autorisations Supabase des tables messages et profiles.</p></div>`;
+    return;
+  }
+  const profiles = Object.fromEntries((pr.data || []).map(p => [p.id, p]));
+  const byClient = new Map();
+  (mr.data || []).forEach(m => {
+    if (!byClient.has(m.user_id)) byClient.set(m.user_id, []);
+    byClient.get(m.user_id).push(m);
+  });
+  // Afficher aussi les porteurs de projet qui n'ont pas encore initié de conversation,
+  // afin que le superviseur puisse les contacter en premier.
+  (pr.data || []).filter(p => p.role === "porteur").forEach(p => {
+    if (!byClient.has(p.id)) byClient.set(p.id, []);
+  });
+  const clients = [...byClient.entries()].sort((a,b) =>
+    new Date(b[1][0]?.created_at || 0) - new Date(a[1][0]?.created_at || 0)
+  );
+  if (activeMessageClientId && !byClient.has(activeMessageClientId)) activeMessageClientId = null;
+  const selected = activeMessageClientId ? (byClient.get(activeMessageClientId) || []).slice().reverse() : [];
+  const cp = activeMessageClientId ? (profiles[activeMessageClientId] || {}) : {};
+  const clientName = [cp.prenom, cp.nom].filter(Boolean).join(" ") || cp.email || "Client";
+  const wa = whatsappUrl(cp.telephone, `Bonjour ${clientName}, je vous contacte au sujet de votre dossier auprès d'ADEL INVEST.`);
+  $("grid").innerHTML = `<div class="card" style="grid-column:1/-1">
+    <h4>${space === "lecteur" ? "Consultation des échanges clients" : "Messagerie et suivi des clients"}</h4>
+    <p style="color:var(--mu)">Répondez dans la messagerie ADEL INVEST ou contactez le client sur WhatsApp. Les échanges internes sont conservés dans l'historique des messages.</p>
+    <div style="display:grid;grid-template-columns:minmax(220px,.8fr) minmax(0,2fr);gap:14px">
+      <section>
+        <h4>Conversations (${clients.length})</h4>
+        ${clients.map(([id, msgs]) => {
+          const p = profiles[id] || {}, last = msgs[0];
+          const pending = msgs.filter(m => m.sender_id === id && !m.is_read).length;
+          const nm = [p.prenom,p.nom].filter(Boolean).join(" ") || p.email || "Client";
+          return `<button type="button" data-message-client="${esc(id)}" class="cat ${id === activeMessageClientId ? "on" : ""}" style="display:block;width:100%;margin:6px 0;text-align:left">
+            <b>${esc(nm)} ${pending ? `(${pending} non lu${pending > 1 ? "s" : ""})` : ""}</b>
+            <span>${esc(String(last?.body || "Aucun échange pour le moment").slice(0,75))}</span><span>${last ? messageTime(last.created_at) : "Nouvelle conversation"}</span>
+          </button>`;
+        }).join("") || `<p style="color:var(--mu)">Aucun message client pour le moment.</p>`}
+      </section>
+      <section style="min-width:0;border:1px solid var(--bd);border-radius:10px;padding:12px">
+        ${activeMessageClientId ? `<h4>Conversation avec ${esc(clientName)}</h4>
+          <p style="color:var(--mu);font-size:13px">${esc(cp.email || "")} · ${esc(cp.telephone || "Téléphone non renseigné")}</p>
+          ${cp.telephone && !readOnly ? `<div class="msg-toolbar"><span style="font-size:13px;color:var(--mu)">Téléphone du client :</span><a class="wa-link" id="openClientWhatsApp" href="${esc(wa || "#")}" target="_blank" rel="noopener noreferrer">${esc(cp.telephone)} · Ouvrir WhatsApp</a></div>` : cp.telephone ? `<p style="color:var(--mu)">Téléphone : ${esc(cp.telephone)} · Consultation seule</p>` : `<p class="err">Aucun numéro de téléphone renseigné dans le profil du client.</p>`}
+          <div style="display:grid;gap:9px;max-height:420px;overflow:auto;padding:4px 0" id="adminMessageThread">
+            ${selected.map(m => `<div class="msg-bubble ${m.sender_id === activeMessageClientId ? "theirs" : "mine"}">
+              <b>${m.sender_id === activeMessageClientId ? "Client" : "Supervision ADEL INVEST"}</b>
+              <div style="white-space:pre-wrap;margin:5px 0">${esc(m.body)}</div><small style="color:var(--mu)">${messageTime(m.created_at)}</small>
+            </div>`).join("")}
+          </div>
+          ${readOnly ? `<p style="color:var(--mu)">Mode lecture seule : vous pouvez consulter les échanges, mais pas répondre ni contacter le client.</p>` : `<form id="replyAdminMessage" style="border-top:1px solid var(--bd);padding-top:12px;margin-top:12px">
+            <label for="adminMessageBody">Écrire une réponse au client</label>
+            <textarea id="adminMessageBody" rows="3" maxlength="5000" required placeholder="Bonjour, concernant votre projet…"></textarea>
+            <div class="err" id="adminMessageError"></div>
+            <button class="btn" id="sendAdminReply" type="submit">Envoyer la réponse</button>
+          </form>
+          ${cp.telephone ? `<div style="border-top:1px solid var(--bd);padding-top:10px;margin-top:10px">
+            <label for="waJournalBody">Votre message WhatsApp</label>
+            <textarea id="waJournalBody" rows="3" maxlength="2000">Bonjour ${esc(clientName)}, je vous contacte au sujet de votre dossier auprès d'ADEL INVEST.</textarea>
+            <button class="btn o" id="sendWhatsAppFromPanel" type="button">Ouvrir WhatsApp et préparer l'envoi</button>
+            <small style="display:block;color:var(--mu);margin-top:6px">WhatsApp s'ouvre avec ce texte. Vous devez appuyer sur « Envoyer » dans WhatsApp. La démarche est inscrite dans le journal, sans prétendre confirmer la livraison.</small>
+          </div>` : ""}`}` : `<p style="color:var(--mu)">Sélectionnez un client pour consulter la conversation et les coordonnées disponibles.</p>`}
+      </section>
+    </div>
+  </div>`;
+  $("grid").querySelectorAll("[data-message-client]").forEach(b => b.onclick = () => {
+    activeMessageClientId = b.dataset.messageClient;
+    renderMessages();
+  });
+  if (activeMessageClientId) {
+    await sb.from("messages").update({ is_read: true })
+      .eq("user_id", activeMessageClientId).eq("is_read", false);
+    if (!readOnly) {
+      $("replyAdminMessage").onsubmit = async e => {
+        e.preventDefault();
+        const body = $("adminMessageBody").value.trim();
+        if (!body) return;
+        const btn = $("sendAdminReply");
+        btn.disabled = true; btn.textContent = "Envoi…";
+        const { error: sendError } = await sb.from("messages").insert({
+          user_id: activeMessageClientId, sender_id: user.id, body, is_read: false
+        });
+        if (sendError) {
+          $("adminMessageError").textContent = "Envoi impossible : " + sendError.message;
+          btn.disabled = false; btn.textContent = "Envoyer la réponse";
+          return;
+        }
+        await renderMessages();
+      };
+      const waLink = $("openClientWhatsApp");
+      if (waLink) waLink.onclick = async e => {
+        e.preventDefault();
+        const draft = $("waJournalBody")?.value || "";
+        const win = window.open("about:blank", "_blank");
+        try {
+          await logWhatsAppContact(activeMessageClientId, cp.telephone, draft);
+          if (win) win.location.href = whatsappUrl(cp.telephone, draft);
+          else window.location.href = whatsappUrl(cp.telephone, draft);
+        } catch (err) {
+          if (win) win.close();
+          toast("Impossible d'inscrire le contact au journal : " + (err.message || err));
+        }
+      };
+      const waButton = $("sendWhatsAppFromPanel");
+      if (waButton) waButton.onclick = async () => {
+        const draft = $("waJournalBody").value.trim();
+        if (!draft) return toast("Rédigez votre message WhatsApp.");
+        const win = window.open("about:blank", "_blank");
+        waButton.disabled = true;
+        try {
+          await logWhatsAppContact(activeMessageClientId, cp.telephone, draft);
+          if (win) win.location.href = whatsappUrl(cp.telephone, draft);
+          else window.location.href = whatsappUrl(cp.telephone, draft);
+        } catch (err) {
+          if (win) win.close();
+          toast("Impossible d'inscrire le contact au journal : " + (err.message || err));
+        } finally { waButton.disabled = false; }
+      };
+    }
+  }
+}
+
+async function renderCommunicationJournal() {
+  $("grid").innerHTML = `<div class="card" style="grid-column:1/-1"><h4>Journal des échanges clients</h4><p style="color:var(--mu)">Chargement du journal…</p></div>`;
+  const [jr, mr, pr] = await Promise.all([
+    sb.from("journal_communications").select("*").order("created_at", {ascending:false}).limit(2000),
+    sb.from("messages").select("*").order("created_at", {ascending:false}).limit(3000),
+    sb.from("profiles").select("id,prenom,nom,email")
+  ]);
+  if (jr.error || mr.error || pr.error) {
+    const err = jr.error || mr.error || pr.error;
+    $("grid").innerHTML = `<div class="card" style="grid-column:1/-1"><h4>Journal des échanges clients</h4><p class="err">${esc(err.message)}</p><p style="color:var(--mu)">Créez la table journal_communications et ses politiques RLS avec le script SQL fourni.</p></div>`;
+    return;
+  }
+  const profs = Object.fromEntries((pr.data || []).map(p => [p.id,p]));
+  const rows = [
+    ...(jr.data || []).map(r => ({...r, kind:"WhatsApp", clientId:r.client_user_id, actorId:r.supervisor_id, created_at:r.created_at, content:r.body, status:r.status || "Contact initié"})),
+    ...(mr.data || []).map(m => ({...m, kind:"Messagerie ADEL", clientId:m.user_id, actorId:m.sender_id, created_at:m.created_at, content:m.body, status:m.is_read ? "Lu" : "Non lu"}))
+  ].sort((a,b) => new Date(b.created_at) - new Date(a.created_at));
+  $("grid").innerHTML = `<div class="card" style="grid-column:1/-1">
+    <div style="display:flex;justify-content:space-between;gap:10px;align-items:center;flex-wrap:wrap">
+      <div><h4>Journal des échanges clients (${rows.length})</h4><p style="color:var(--mu)">Vue globale des messages internes et des prises de contact WhatsApp initiées par les superviseurs.</p></div>
+      <button class="btn o" id="refreshCommJournal">Actualiser</button>
+    </div>
+    <div style="overflow-x:auto"><table><thead><tr><th>Date</th><th>Client</th><th>Superviseur</th><th>Canal</th><th>Numéro</th><th>Message / objet</th><th>Statut</th></tr></thead><tbody>
+    ${rows.map(r => {
+      const c = profs[r.clientId] || {}, actor = profs[r.actorId] || {};
+      return `<tr><td>${esc(messageTime(r.created_at))}</td><td>${esc([c.prenom,c.nom].filter(Boolean).join(" ") || c.email || r.clientId || "—")}<small>${esc(c.email || "")}</small></td><td>${esc([actor.prenom,actor.nom].filter(Boolean).join(" ") || actor.email || "—")}</td><td>${esc(r.kind)}</td><td>${esc(r.phone || c.telephone || "—")}</td><td style="white-space:pre-wrap;min-width:220px">${esc(r.content || "")}</td><td>${esc(r.status)}</td></tr>`;
+    }).join("") || `<tr><td colspan="7" style="color:var(--mu)">Aucun échange enregistré.</td></tr>`}
+    </tbody></table></div>
+  </div>`;
+  $("refreshCommJournal").onclick = renderCommunicationJournal;
+}
+
 async function navigate(view) {
   setActiveMenu(view);
   const adm = isAdminSpace(), sa = space === "super_admin";
   $("subHello").textContent = space === "super_admin" ? "Espace super administrateur"
     : space === "admin" ? "Espace administrateur" : space === "lecteur" ? "Espace de supervision (lecture seule)" : "Bienvenue sur votre espace porteur de projet";
   document.querySelectorAll('aside a[data-v="projet"],aside a[data-v="docs"]').forEach(a => a.classList.toggle("hide", adm));
-  $("mArch").classList.toggle("hide", !(sa || space === "lecteur")); $("mJour").classList.toggle("hide", !sa);
+  $("mArch").classList.toggle("hide", !(sa || space === "lecteur")); $("mJour").classList.toggle("hide", !sa); $("mJournalMessages").classList.toggle("hide", !sa);
   if (view === "dash" || view === "projet") {
     if (adm) return renderAdmin();
     return fiche ? renderDash() : renderNew();
   }
   if (view === "archivage") return (sa || space === "lecteur") ? renderArchivage() : navigate("dash");
   if (view === "journal") return sa ? renderJournal() : navigate("dash");
+  if (view === "journal_messages") return sa ? renderCommunicationJournal() : navigate("dash");
   if (view === "docs") return renderDocumentsPage();
-  if (view === "messages") return renderDataPage("Mes messages", "messages", "Messages accessibles selon les règles de sécurité Supabase.");
+  if (view === "messages") return renderMessages();
   if (view === "actualites") return renderDataPage("Actualités", "actualites", "Informations et actualités publiées sur ADEL INVEST.");
   if (view === "support") return renderDataPage("Support", "support_tickets", "Suivi de vos demandes de support.");
   if (view === "settings") return renderSettings();
