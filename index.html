@@ -1251,64 +1251,14 @@ $("grid").addEventListener("change", async e => {
   } catch (err) { toast("Photo non enregistrée : " + err.message); }
 });
 
-async function renderDash() {
+// ===== DÉTAIL DU PROJET (fenêtre modale) =====
+function showDetail(docs) {
   const idx = Math.max(0, STEPS.findIndex(s => s[0] === fiche.statut));
-  const cat = CATS[fiche.categorie]?.[0] || "—";
-  const folder = `${user.id}/${fiche.id}`;
-  const [docsResult, notifs] = await Promise.all([
-    sb.storage.from(DOCS_BUCKET).list(folder, { limit: 100, sortBy: { column: "created_at", order: "desc" } }),
-    sb.from("notifications").select("*").eq("user_id", user.id).order("created_at", { ascending: false }).limit(3)
-  ]);
-  const docsError = docsResult.error;
-  const docs = (docsResult.data || []).filter(f => f.name && f.id);
-  const steps = STEPS.map((s, i) => `<div class="st ${i < idx ? "ok" : i === idx ? "cur" : ""}"><i>${i < idx ? "✓" : i + 1}</i><span>${s[1]}</span></div>`).join("");
-  $("grid").innerHTML = profCard() + `<div id="projet">
-    <div class="proj">Mon projet foncier <span>✓ Projet enregistré</span></div>
-    <div class="card" style="margin-top:12px"><div class="pbody"><div class="rows">
-      <div><b>Titre du projet :</b>${esc(fiche.titre)}</div><div><b>Type de projet :</b>${esc(fiche.type_projet || "—")}</div>
-      <div><b>Catégorie :</b>${esc(cat)}</div><div><b>Localisation :</b>${esc(fiche.localisation || "—")}</div>
-      <div><b>Superficie :</b>${esc(fiche.superficie || "—")} hectares</div><div><b>Enregistré le :</b>${fmt(fiche.created_at)}</div></div>
-      <div class="acts"><button class="btn">Voir le détail de mon projet</button><button class="btn o" id="edit">Modifier mon projet</button>
-      <button class="btn o" id="addd">Joindre des documents</button><button class="btn d" id="del">Supprimer mon projet</button></div></div>
-      <div class="steps">${steps}</div></div></div>
-    <div class="three">
-      <div class="card" id="docs"><h4>Mes documents</h4><div id="maFiche"></div>${
-        docsError
-          ? `<p class="err">Erreur : ${esc(docsError.message)}</p>`
-          : docs.length
-            ? docs.map((d, i) => `<div class="li"><div>${esc(d.name.replace(/^\d+_/, ""))}<small>Déposé le ${fmt(d.created_at)}</small></div><button class="btn" type="button" data-dash-doc="${i}">Ouvrir</button></div>`).join("")
-            : '<p style="color:var(--mu)">Aucun document pour le moment.</p>'
-      }</div>
-      <div class="card"><h4>À propos de mon projet</h4><p>${esc(fiche.description || "Aucune description.")}</p>
-        <p style="border-top:1px solid var(--bd);padding-top:8px"><b>Contact ADEL INVEST</b><br>☎ +221 33 123 45 67<br>✉ contact@adel-invest.sn</p></div>
-      <div class="card"><h4>Mes notifications</h4>${(notifs.data || []).map(n => `<div class="li"><div>${esc(n.message)}<small>${fmt(n.created_at)}</small></div></div>`).join("") || '<p style="color:var(--mu)">Aucune notification.</p>'}</div>
-    </div>`;
-
-  $("grid").querySelectorAll("button[data-dash-doc]").forEach(button => {
-    button.addEventListener("click", async () => {
-      const file = docs[Number(button.dataset.dashDoc)];
-      if (!file) return;
-      button.disabled = true; button.textContent = "Préparation…";
-      const { data, error } = await sb.storage.from(DOCS_BUCKET).createSignedUrl(`${folder}/${file.name}`, 60);
-      button.disabled = false; button.textContent = "Ouvrir";
-      if (error) return toast("Ouverture impossible : " + error.message);
-      window.open(data.signedUrl, "_blank", "noopener,noreferrer");
-    });
-  });
-
-  loadMaFiche();
-  $("del").onclick = async () => {
-    if (!confirm("Supprimer définitivement ce projet ?")) return;
-    await sb.from("fiches").delete().eq("id", fiche.id); start();
-  };
-  $("edit").onclick = async () => {
-    const t = prompt("Nouveau titre du projet :", fiche.titre);
-    if (t) { await sb.from("fiches").update({ titre: t, updated_at: new Date().toISOString() }).eq("id", fiche.id); start(); }
-  };
-  $("addd").onclick = () => navigate("docs");
-}
-drawSCats();
-start();
-</script>
-</body>
-</html>
+  let dlg = $("detailDlg");
+  if (!dlg) {
+    dlg = document.createElement("dialog"); dlg.id = "detailDlg";
+    dlg.style.cssText = "border:1px solid var(--bd);border-radius:12px;max-width:620px;width:92vw;background:var(--card);color:var(--ink);padding:20px";
+    document.body.appendChild(dlg);
+  }
+  dlg.innerHTML = `<h4 style="margin:0 0 4px;color:var(--g);font-size:20px">${esc(fiche.titre)}</h4>
+   
